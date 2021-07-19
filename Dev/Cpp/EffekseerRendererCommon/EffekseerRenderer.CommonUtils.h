@@ -512,7 +512,7 @@ void SetVertexAlphaThreshold(U& v, float value)
 {
 }
 
-static int32_t GetMaximumVertexSizeInAllTypes()
+inline int32_t GetMaximumVertexSizeInAllTypes()
 {
 	size_t size = sizeof(DynamicVertexWithCustomData);
 	size = (std::max)(size, sizeof(SimpleVertex));
@@ -654,6 +654,33 @@ void ApplyViewOffset(::Effekseer::SIMD::Mat43f& mat,
 void ApplyViewOffset(::Effekseer::SIMD::Mat44f& mat,
 					 const ::Effekseer::SIMD::Mat44f& camera,
 					 float distance);
+
+struct ZFixedTransformBlock
+{
+	Effekseer::SIMD::Float4 m0;
+	Effekseer::SIMD::Float4 m1;
+	Effekseer::SIMD::Float4 center;
+
+	ZFixedTransformBlock(const ::Effekseer::SIMD::Mat43f& mat, float z)
+	{
+		using namespace Effekseer::SIMD;
+
+		m0 = mat.X;
+		m1 = mat.Y;
+		auto m2 = mat.Z;
+		center = Float4::SetZero();
+		Float4::Transpose(m0, m1, m2, center);
+		center = center + m2 * z;
+	}
+
+	void Transform(Effekseer::SIMD::Vec3f& data)
+	{
+		using namespace Effekseer::SIMD;
+
+		Float4 oPos = Float4::MulAddLane<0>(center, m0, data.s);
+		data.s = Float4::MulAddLane<1>(oPos, m1, data.s);
+	}
+};
 
 template <typename Vertex>
 inline void TransformVertexes(Vertex& vertexes, int32_t count, const ::Effekseer::SIMD::Mat43f& mat)
@@ -939,7 +966,8 @@ struct ShaderParameterCollector
 		IsDepthRequired = isSoftParticleEnabled;
 		MaterialRenderDataPtr = nullptr;
 
-		auto isMaterial = param->MaterialType == ::Effekseer::RendererMaterialType::File && param->MaterialRenderDataPtr != nullptr;
+		auto isMaterial = param->MaterialType == ::Effekseer::RendererMaterialType::File && param->MaterialRenderDataPtr != nullptr && renderer->GetRenderMode() == Effekseer::RenderMode::Normal;
+
 		if (isMaterial)
 		{
 			MaterialDataPtr = effect->GetMaterial(param->MaterialRenderDataPtr->MaterialIndex);
@@ -969,7 +997,13 @@ struct ShaderParameterCollector
 			IsDepthRequired = true;
 		}
 
-		if (param->MaterialType == ::Effekseer::RendererMaterialType::File && isMaterial)
+		// TODO : refactor in 1.7
+		const auto whiteMode = renderer->GetRenderMode() == Effekseer::RenderMode::Wireframe || renderer->GetExternalShaderSettings() != nullptr;
+		if (whiteMode)
+		{
+			ShaderType = RendererShaderType::Unlit;
+		}
+		else if (param->MaterialType == ::Effekseer::RendererMaterialType::File && isMaterial)
 		{
 			MaterialRenderDataPtr = param->MaterialRenderDataPtr;
 			if (MaterialRenderDataPtr != nullptr)
@@ -1019,10 +1053,24 @@ struct ShaderParameterCollector
 			ShaderType = RendererShaderType::Unlit;
 		}
 
-		if (MaterialRenderDataPtr != nullptr && MaterialDataPtr != nullptr)
+		// TODO : refactor in 1.7
+		if (whiteMode)
+		{
+			TextureCount = 1;
+			Textures[0] = renderer->GetImpl()->GetProxyTexture(EffekseerRenderer::ProxyTextureType::White);
+			TextureFilterTypes[0] = param->TextureFilters[0];
+			TextureWrapTypes[0] = param->TextureWraps[0];
+
+			if (IsDepthRequired)
+			{
+				DepthIndex = TextureCount;
+				TextureCount += 1;
+			}
+		}
+		else if (isMaterial)
 		{
 			TextureCount = static_cast<int32_t>(Effekseer::Min(MaterialRenderDataPtr->MaterialTextures.size(), ::Effekseer::UserTextureSlotMax));
-			for (size_t i = 0; i < TextureCount; i++)
+			for (int32_t i = 0; i < TextureCount; i++)
 			{
 				if (MaterialRenderDataPtr->MaterialTextures[i].Type == 1)
 				{
@@ -1483,6 +1531,9 @@ struct PixelConstantBufferDistortion
 };
 
 void CalculateAlignedTextureInformation(Effekseer::Backend::TextureFormatType format, const std::array<int, 2>& size, int32_t& sizePerWidth, int32_t& height);
+
+//! only support OpenGL
+Effekseer::Backend::VertexLayoutRef GetVertexLayout(Effekseer::Backend::GraphicsDeviceRef graphicsDevice, RendererShaderType type);
 
 } // namespace EffekseerRenderer
 #endif // __EFFEKSEERRENDERER_COMMON_UTILS_H__

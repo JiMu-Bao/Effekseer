@@ -1,6 +1,8 @@
 project(Effekseer)
 cmake_minimum_required(VERSION 3.1)
 
+FIND_PACKAGE(Threads REQUIRED)
+
 # Setup source codes
 file(GLOB effekseer_h
     *.h
@@ -89,6 +91,8 @@ set(files
     ${effekseer_h}
     ${effekseer_src})
 
+target_link_libraries(Effekseer PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+
 FilterFolder("${files}")
 if(CLANG_FORMAT_ENABLED)
     clang_format(Effekseer)
@@ -114,7 +118,7 @@ if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /we4456 /we4458)
 endif()
 
-if(BUILD_UNITYPLUGIN)
+if(BUILD_UNITYPLUGIN OR BUILD_UNITYPLUGIN_FOR_IOS)
     install(DIRECTORY "${PROJECT_SOURCE_DIR}"
         DESTINATION "include"
         FILES_MATCHING

@@ -26,12 +26,6 @@ class Recorder;
 }
 } // namespace Effekseer
 
-enum class RenderMode
-{
-	Normal,
-	Wireframe,
-};
-
 enum class ViewMode
 {
 	_3D,
@@ -63,7 +57,7 @@ public:
 	float CullingZ;
 
 	Effekseer::Tool::DistortionType Distortion;
-	RenderMode RenderingMode;
+	Effekseer::Tool::RenderingMethodType RenderingMode;
 	ViewMode ViewerMode;
 
 	ViewerParamater();
@@ -197,13 +191,24 @@ private:
 		void ReleaseAll();
 	};
 
+	const float DistanceBase = 15.0f;
+	const float OrthoScaleBase = 16.0f;
+	const float ZoomDistanceFactor = 1.125f;
+	const float MaxZoom = 40.0f;
+	const float MinZoom = -40.0f;
+	const float PI = 3.14159265f;
+
+	float g_RotX = 30.0f;
+	float g_RotY = -30.0f;
+	float g_Zoom = 0.0f;
+
+	bool g_mouseRotDirectionInvX = false;
+	bool g_mouseRotDirectionInvY = false;
+
+	bool g_mouseSlideDirectionInvX = false;
+	bool g_mouseSlideDirectionInvY = false;
+
 	Effekseer::Tool::ViewerEffectBehavior behavior_;
-
-	int32_t m_time;
-
-	int m_step;
-
-	bool m_isSRGBMode = false;
 
 	::Effekseer::EffectRef effect_ = nullptr;
 
@@ -237,6 +242,12 @@ private:
 	EffekseerTool::ViewPointController viewPointCtrl_;
 
 	::Effekseer::EffectRef GetEffect();
+
+	void SetZoom(float zoom);
+
+	float GetDistance();
+
+	float GetOrthoScale();
 
 public:
 	Native();
@@ -362,6 +373,8 @@ public:
 	void TerminateMaterialEditor();
 
 	bool GetIsUpdateMaterialRequiredAndReset();
+
+	bool GetNodeLifeTimes(int32_t nodeId, int32_t* frameMin, int32_t* frameMax);
 
 	static void SetFileLogger(const char16_t* path);
 

@@ -145,17 +145,17 @@ static void CalculateNormal(ProceduralMesh& mesh)
 	CustomAlignedUnorderedMap<SIMD::Vec3f, int32_t> vertexCounts;
 
 	auto generateKey = [](SIMD::Vec3f s) -> SIMD::Vec3f {
-		s.SetX(roundf(s.GetX() * 1024.0f));
-		s.SetY(roundf(s.GetY() * 1024.0f));
-		s.SetZ(roundf(s.GetZ() * 1024.0f));
-		return s;
+		return SIMD::Vec3f{
+			roundf(s.GetX() * 1024.0f),
+			roundf(s.GetY() * 1024.0f),
+			roundf(s.GetZ() * 1024.0f)};
 	};
 
 	for (size_t i = 0; i < mesh.Faces.size(); i++)
 	{
 		for (size_t j = 0; j < 3; j++)
 		{
-			const auto& key = generateKey(mesh.Vertexes[mesh.Faces[i].Indexes[j]].Position);
+			const auto key = generateKey(mesh.Vertexes[mesh.Faces[i].Indexes[j]].Position);
 
 			if (normals.count(key) == 0)
 			{
@@ -177,7 +177,7 @@ static void CalculateNormal(ProceduralMesh& mesh)
 
 	for (size_t i = 0; i < mesh.Vertexes.size(); i++)
 	{
-		const auto& key = generateKey(mesh.Vertexes[i].Position);
+		const auto key = generateKey(mesh.Vertexes[i].Position);
 		mesh.Vertexes[i].Normal = normals[key] / static_cast<float>(vertexCounts[key]);
 		mesh.Vertexes[i].Tangent = tangents[key] / static_cast<float>(vertexCounts[key]);
 	}
@@ -375,9 +375,6 @@ struct RotatorSphere
 			angle = angleMin;
 		}
 
-		float valueMin = depthMin * Radius;
-		float valueMax = depthMax * Radius;
-
 		value = Clamp(value, 1.0f, 0.0f);
 
 		return SIMD::Vec2f(cosf(angle) * Radius, sinf(angle) * Radius);
@@ -555,19 +552,6 @@ struct RotatorMeshGenerator
 			}
 		}
 
-		/*
-		for (size_t i = 0; i < ret.Vertexes.size(); i++)
-		{
-			auto r = ret.Vertexes[i].Position.GetY();
-			auto x = ret.Vertexes[i].Position.GetX();
-			auto z = ret.Vertexes[i].Position.GetZ();
-			auto newX = cosf(r) * x + sinf(r) * z;
-			auto newZ = - sinf(r) * x + cosf(r) * z;
-			ret.Vertexes[i].Position.SetX(newX);
-			ret.Vertexes[i].Position.SetZ(newZ);
-		}
-		*/
-
 		for (size_t i = 0; i < ret.Vertexes.size(); i++)
 		{
 			ret.Vertexes[i].Position = Noise(ret.Vertexes[i].Position);
@@ -619,14 +603,12 @@ struct RotatedWireMeshGenerator
 
 		if (CrossSectionType == ProceduralModelCrossSectionType::Cross)
 		{
-			vertexPoses = {
-				SIMD::Vec3f(+0.5f, 0.0f, 0.0f),
-				SIMD::Vec3f(+0.0f, 0.0f, 0.0f),
-				SIMD::Vec3f(-0.5f, 0.0f, 0.0f),
-				SIMD::Vec3f(0.0f, 0.0f, -0.5f),
-				SIMD::Vec3f(0.0f, 0.0f, +0.0f),
-				SIMD::Vec3f(0.0f, 0.0f, +0.5f),
-			};
+			vertexPoses.emplace_back(+0.5f, 0.0f, 0.0f);
+			vertexPoses.emplace_back(+0.0f, 0.0f, 0.0f);
+			vertexPoses.emplace_back(-0.5f, 0.0f, 0.0f);
+			vertexPoses.emplace_back(0.0f, 0.0f, -0.5f);
+			vertexPoses.emplace_back(0.0f, 0.0f, +0.0f);
+			vertexPoses.emplace_back(0.0f, 0.0f, +0.5f);
 
 			edgeIDs = {
 				0,
@@ -650,11 +632,9 @@ struct RotatedWireMeshGenerator
 		}
 		else if (CrossSectionType == ProceduralModelCrossSectionType::Plane)
 		{
-			vertexPoses = {
-				SIMD::Vec3f(+0.5f, 0.0f, 0.0f),
-				SIMD::Vec3f(+0.0f, 0.0f, 0.0f),
-				SIMD::Vec3f(-0.5f, 0.0f, 0.0f),
-			};
+			vertexPoses.emplace_back(+0.5f, 0.0f, 0.0f);
+			vertexPoses.emplace_back(+0.0f, 0.0f, 0.0f);
+			vertexPoses.emplace_back(-0.5f, 0.0f, 0.0f);
 
 			edgeIDs = {
 				0,
@@ -671,9 +651,7 @@ struct RotatedWireMeshGenerator
 		}
 		else if (CrossSectionType == ProceduralModelCrossSectionType::Point)
 		{
-			vertexPoses = {
-				SIMD::Vec3f(0.0f, 0.0f, 0.0f),
-			};
+			vertexPoses.emplace_back(0.0f, 0.0f, 0.0f);
 
 			edgeIDs = {
 				0,
@@ -789,57 +767,52 @@ struct RotatedWireMeshGenerator
 	}
 };
 
-ModelRef ProceduralModelGenerator::Generate(const ProceduralModelParameter* parameter)
+ModelRef ProceduralModelGenerator::Generate(const ProceduralModelParameter& parameter)
 {
-	if (parameter == nullptr)
-	{
-		return nullptr;
-	}
-
 	RandObject randObj;
 	CurlNoise curlNoise(0, 1.0f, 2);
 
 	std::function<SIMD::Vec2f(float)> primitiveGenerator;
 
-	if (parameter->PrimitiveType == ProceduralModelPrimitiveType::Sphere)
+	if (parameter.PrimitiveType == ProceduralModelPrimitiveType::Sphere)
 	{
 		RotatorSphere rotator;
-		rotator.DepthMin = parameter->Sphere.DepthMin;
-		rotator.DepthMax = parameter->Sphere.DepthMax;
-		rotator.Radius = parameter->Sphere.Radius;
+		rotator.DepthMin = parameter.Sphere.DepthMin;
+		rotator.DepthMax = parameter.Sphere.DepthMax;
+		rotator.Radius = parameter.Sphere.Radius;
 
 		primitiveGenerator = [rotator](float value) -> SIMD::Vec2f {
 			return rotator.GetPosition(value);
 		};
 	}
-	else if (parameter->PrimitiveType == ProceduralModelPrimitiveType::Cone)
+	else if (parameter.PrimitiveType == ProceduralModelPrimitiveType::Cone)
 	{
 		RotatorCone rotator;
-		rotator.Radius = parameter->Cone.Radius;
-		rotator.Depth = parameter->Cone.Depth;
+		rotator.Radius = parameter.Cone.Radius;
+		rotator.Depth = parameter.Cone.Depth;
 
 		primitiveGenerator = [rotator](float value) -> SIMD::Vec2f {
 			return rotator.GetPosition(value);
 		};
 	}
-	else if (parameter->PrimitiveType == ProceduralModelPrimitiveType::Cylinder)
+	else if (parameter.PrimitiveType == ProceduralModelPrimitiveType::Cylinder)
 	{
 		RotatorCylinder rotator;
-		rotator.Radius1 = parameter->Cylinder.Radius1;
-		rotator.Radius2 = parameter->Cylinder.Radius2;
-		rotator.Depth = parameter->Cylinder.Depth;
+		rotator.Radius1 = parameter.Cylinder.Radius1;
+		rotator.Radius2 = parameter.Cylinder.Radius2;
+		rotator.Depth = parameter.Cylinder.Depth;
 
 		primitiveGenerator = [rotator](float value) -> SIMD::Vec2f {
 			return rotator.GetPosition(value);
 		};
 	}
-	else if (parameter->PrimitiveType == ProceduralModelPrimitiveType::Spline4)
+	else if (parameter.PrimitiveType == ProceduralModelPrimitiveType::Spline4)
 	{
 		RotatorSpline3 rotator;
-		rotator.Point1 = parameter->Spline4.Point1;
-		rotator.Point2 = parameter->Spline4.Point2;
-		rotator.Point3 = parameter->Spline4.Point3;
-		rotator.Point4 = parameter->Spline4.Point4;
+		rotator.Point1 = parameter.Spline4.Point1;
+		rotator.Point2 = parameter.Spline4.Point2;
+		rotator.Point3 = parameter.Spline4.Point3;
+		rotator.Point4 = parameter.Spline4.Point4;
 		rotator.Calculate();
 
 		primitiveGenerator = [rotator](float value) -> SIMD::Vec2f {
@@ -854,8 +827,8 @@ ModelRef ProceduralModelGenerator::Generate(const ProceduralModelParameter* para
 	std::function<SIMD::Vec3f(SIMD::Vec3f)> noiseFunc = [parameter, &curlNoise](SIMD::Vec3f v) -> SIMD::Vec3f {
 		// tilt noise
 		{
-			float angleX = CalcSineWave(v.GetY(), parameter->TiltNoiseFrequency[0], parameter->TiltNoiseOffset[0], parameter->TiltNoisePower[0]);
-			float angleY = CalcSineWave(v.GetY(), parameter->TiltNoiseFrequency[1], parameter->TiltNoiseOffset[1], parameter->TiltNoisePower[1]);
+			float angleX = CalcSineWave(v.GetY(), parameter.TiltNoiseFrequency[0], parameter.TiltNoiseOffset[0], parameter.TiltNoisePower[0]);
+			float angleY = CalcSineWave(v.GetY(), parameter.TiltNoiseFrequency[1], parameter.TiltNoiseOffset[1], parameter.TiltNoisePower[1]);
 
 			SIMD::Vec3f dirX(cos(angleX), sin(angleX), 0.0f);
 			SIMD::Vec3f dirZ(0.0f, sin(angleY), cos(angleY));
@@ -866,82 +839,82 @@ ModelRef ProceduralModelGenerator::Generate(const ProceduralModelParameter* para
 		}
 
 		v = WaveNoise(v,
-					  parameter->WaveNoiseOffset,
-					  parameter->WaveNoiseFrequency,
-					  parameter->WaveNoisePower);
+					  parameter.WaveNoiseOffset,
+					  parameter.WaveNoiseFrequency,
+					  parameter.WaveNoisePower);
 
-		return v + curlNoise.Get(v * parameter->CurlNoiseFrequency + parameter->CurlNoiseOffset) * parameter->CurlNoisePower;
+		return v + curlNoise.Get(v * parameter.CurlNoiseFrequency + parameter.CurlNoiseOffset) * parameter.CurlNoisePower;
 	};
 
-	if (parameter->Type == ProceduralModelType::Mesh)
+	if (parameter.Type == ProceduralModelType::Mesh)
 	{
-		const auto AngleBegin = parameter->Mesh.AngleBegin / 180.0f * EFK_PI;
-		const auto AngleEnd = parameter->Mesh.AngleEnd / 180.0f * EFK_PI;
+		const auto AngleBegin = parameter.Mesh.AngleBegin / 180.0f * EFK_PI;
+		const auto AngleEnd = parameter.Mesh.AngleEnd / 180.0f * EFK_PI;
 		const auto eps = 0.000001f;
-		const auto isConnected = std::fmod(std::abs(parameter->Mesh.AngleBegin - parameter->Mesh.AngleEnd), 360.0f) < eps;
+		const auto isConnected = std::fmod(std::abs(parameter.Mesh.AngleBegin - parameter.Mesh.AngleEnd), 360.0f) < eps;
 
 		auto generator = RotatorMeshGenerator();
 		generator.Rotator = primitiveGenerator;
 		generator.Noise = noiseFunc;
 		generator.AngleMin = AngleBegin;
 		generator.AngleMax = AngleEnd;
-		generator.RotatedSpeed = parameter->Mesh.Rotate;
+		generator.RotatedSpeed = parameter.Mesh.Rotate;
 		generator.IsConnected = isConnected;
-		auto generated = generator.Generate(parameter->Mesh.Divisions[0], parameter->Mesh.Divisions[1]);
+		auto generated = generator.Generate(parameter.Mesh.Divisions[0], parameter.Mesh.Divisions[1]);
 		CalculateNormal(generated);
 		CalculateVertexColor(
 			generated,
-			parameter->ColorUpperLeft,
-			parameter->ColorUpperCenter,
-			parameter->ColorUpperRight,
-			parameter->ColorMiddleLeft,
-			parameter->ColorMiddleCenter,
-			parameter->ColorMiddleRight,
-			parameter->ColorLowerLeft,
-			parameter->ColorLowerCenter,
-			parameter->ColorLowerRight,
-			parameter->ColorCenterPosition,
-			parameter->ColorCenterArea);
+			parameter.ColorUpperLeft,
+			parameter.ColorUpperCenter,
+			parameter.ColorUpperRight,
+			parameter.ColorMiddleLeft,
+			parameter.ColorMiddleCenter,
+			parameter.ColorMiddleRight,
+			parameter.ColorLowerLeft,
+			parameter.ColorLowerCenter,
+			parameter.ColorLowerRight,
+			parameter.ColorCenterPosition,
+			parameter.ColorCenterArea);
 
-		ApplyVertexColorNoise(generated, *parameter);
-		ChangeAxis(generated, parameter->AxisType);
-		ChangeUV(generated, *parameter);
+		ApplyVertexColorNoise(generated, parameter);
+		ChangeAxis(generated, parameter.AxisType);
+		ChangeUV(generated, parameter);
 
 		return ConvertMeshToModel(generated);
 	}
-	else if (parameter->Type == ProceduralModelType::Ribbon)
+	else if (parameter.Type == ProceduralModelType::Ribbon)
 	{
 		auto generator = RotatedWireMeshGenerator();
 		generator.Rotator = primitiveGenerator;
 		generator.Noise = noiseFunc;
-		generator.CrossSectionType = parameter->Ribbon.CrossSection;
-		generator.Vertices = parameter->Ribbon.Vertices;
-		generator.Rotate = parameter->Ribbon.Rotate;
-		generator.Count = parameter->Ribbon.Count;
-		generator.RibbonSizes = parameter->Ribbon.RibbonSizes;
-		generator.RibbonAngles = parameter->Ribbon.RibbonAngles;
-		generator.RibbonNoises = parameter->Ribbon.RibbonNoises;
+		generator.CrossSectionType = parameter.Ribbon.CrossSection;
+		generator.Vertices = parameter.Ribbon.Vertices;
+		generator.Rotate = parameter.Ribbon.Rotate;
+		generator.Count = parameter.Ribbon.Count;
+		generator.RibbonSizes = parameter.Ribbon.RibbonSizes;
+		generator.RibbonAngles = parameter.Ribbon.RibbonAngles;
+		generator.RibbonNoises = parameter.Ribbon.RibbonNoises;
 
 		auto generated = generator.Generate(randObj);
 
 		CalculateNormal(generated);
 		CalculateVertexColor(
 			generated,
-			parameter->ColorUpperLeft,
-			parameter->ColorUpperCenter,
-			parameter->ColorUpperRight,
-			parameter->ColorMiddleLeft,
-			parameter->ColorMiddleCenter,
-			parameter->ColorMiddleRight,
-			parameter->ColorLowerLeft,
-			parameter->ColorLowerCenter,
-			parameter->ColorLowerRight,
-			parameter->ColorCenterPosition,
-			parameter->ColorCenterArea);
+			parameter.ColorUpperLeft,
+			parameter.ColorUpperCenter,
+			parameter.ColorUpperRight,
+			parameter.ColorMiddleLeft,
+			parameter.ColorMiddleCenter,
+			parameter.ColorMiddleRight,
+			parameter.ColorLowerLeft,
+			parameter.ColorLowerCenter,
+			parameter.ColorLowerRight,
+			parameter.ColorCenterPosition,
+			parameter.ColorCenterArea);
 
-		ApplyVertexColorNoise(generated, *parameter);
-		ChangeAxis(generated, parameter->AxisType);
-		ChangeUV(generated, *parameter);
+		ApplyVertexColorNoise(generated, parameter);
+		ChangeAxis(generated, parameter.AxisType);
+		ChangeUV(generated, parameter);
 
 		return ConvertMeshToModel(generated);
 	}

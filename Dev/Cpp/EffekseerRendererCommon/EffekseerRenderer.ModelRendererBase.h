@@ -838,6 +838,15 @@ public:
 		if (param.ModelIndex < 0)
 			return;
 
+		if (renderer->GetExternalShaderSettings() == nullptr)
+		{
+			shader_unlit->OverrideShader(nullptr);
+		}
+		else
+		{
+			shader_unlit->OverrideShader(renderer->GetExternalShaderSettings()->ModelShader);
+		}
+
 		int32_t renderPassCount = 1;
 
 		if (param.BasicParameterPtr->MaterialRenderDataPtr != nullptr && param.BasicParameterPtr->MaterialRenderDataPtr->MaterialIndex >= 0)
@@ -924,7 +933,8 @@ public:
 			}
 		}
 
-		auto distortion = param.BasicParameterPtr->MaterialType == Effekseer::RendererMaterialType::BackDistortion;
+		auto distortion = collector_.ShaderType == EffekseerRenderer::RendererShaderType::BackDistortion ||
+						  collector_.ShaderType == EffekseerRenderer::RendererShaderType::AdvancedBackDistortion;
 
 		if (isBackgroundRequired && renderer->GetBackground() == 0)
 			return;
@@ -994,7 +1004,7 @@ public:
 				{
 					shader_ = advanced_shader_distortion;
 				}
-				else if (param.BasicParameterPtr->MaterialType == Effekseer::RendererMaterialType::Lighting)
+				else if (collector_.ShaderType == EffekseerRenderer::RendererShaderType::AdvancedLit)
 				{
 					shader_ = advanced_shader_lit;
 				}
@@ -1009,7 +1019,7 @@ public:
 				{
 					shader_ = shader_distortion;
 				}
-				else if (param.BasicParameterPtr->MaterialType == Effekseer::RendererMaterialType::Lighting)
+				else if (collector_.ShaderType == EffekseerRenderer::RendererShaderType::Lit)
 				{
 					shader_ = shader_lit;
 				}
@@ -1025,6 +1035,16 @@ public:
 		state.DepthWrite = param.ZWrite;
 		state.AlphaBlend = param.BasicParameterPtr->AlphaBlend;
 		state.CullingType = param.Culling;
+
+		// TODO : refactor in 1.7
+		if (renderer->GetExternalShaderSettings() != nullptr)
+		{
+			state.AlphaBlend = renderer->GetExternalShaderSettings()->Blend;
+		}
+		else if (renderer->GetRenderMode() == Effekseer::RenderMode::Wireframe)
+		{
+			state.AlphaBlend = ::Effekseer::AlphaBlendType::Opacity;
+		}
 
 		if (renderDistortedBackground)
 		{

@@ -4,6 +4,7 @@
 #include "Graphics/efk.PNGHelper.h"
 #include "Recorder/Recorder.h"
 #include "RenderedEffectGenerator.h"
+#define NOMINMAX
 
 #ifdef _WIN32
 #include "Graphics/Platform/DX11/efk.GraphicsDX11.h"
@@ -23,39 +24,45 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
+#include "Effekseer/Effekseer.EffectImplemented.h"
+#include "Effekseer/Effekseer.EffectNode.h"
+
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-#define NONDLL 1
+class EditorEffectNodeUserData : public ::Effekseer::RenderingUserData
+{
+public:
+	// Identifier to use when referring to a node from the editor.
+	int32_t editorNodeId_ = 0;
 
-#ifdef _WIN32
-#define MSWIN32 1
-#define BGDWIN32 1
-#endif
-#include <gd.h>
-#include <gdfontmb.h>
 
-const float DistanceBase = 15.0f;
-const float OrthoScaleBase = 16.0f;
-const float ZoomDistanceFactor = 1.125f;
-const float MaxZoom = 40.0f;
-const float MinZoom = -40.0f;
+	static ::Effekseer::EffectNodeImplemented* FindNodeByEditorNodeId(::Effekseer::EffectImplemented* effect, int32_t editorNodeId)
+	{
+		auto* root = effect->GetRoot();
+		if (!root) return nullptr;
 
-static float g_RotX = 30.0f;
-static float g_RotY = -30.0f;
-static Effekseer::Vector3D g_lightDirection = Effekseer::Vector3D(1, 1, 1);
-static float g_Zoom = 0.0f;
-const float PI = 3.14159265f;
+		::Effekseer::EffectNodeImplemented* result = nullptr;
 
-static bool g_mouseRotDirectionInvX = false;
-static bool g_mouseRotDirectionInvY = false;
+		const auto& visitor = [&](::Effekseer::EffectNodeImplemented* node) -> bool {
+			const auto userData = node->GetRenderingUserData();
+			if (userData != nullptr) {
+				const auto* editorUserData = static_cast<EditorEffectNodeUserData*>(userData.Get());
 
-static bool g_mouseSlideDirectionInvX = false;
-static bool g_mouseSlideDirectionInvY = false;
+				if (editorUserData->editorNodeId_ == editorNodeId) {
+					result = node;
+					return false;
+				}
+			}
+			return true;
+		};
 
-static int g_lastViewWidth = 0;
-static int g_lastViewHeight = 0;
+		static_cast<::Effekseer::EffectNodeImplemented*>(root)->Traverse(visitor);
+
+		return result;
+	}
+};
 
 bool Combine(const char16_t* rootPath, const char16_t* treePath, char16_t* dst, int dst_length)
 {
@@ -164,17 +171,17 @@ bool Combine(const char16_t* rootPath, const char16_t* treePath, char16_t* dst, 
 	return true;
 }
 
-void SetZoom(float zoom)
+void Native::SetZoom(float zoom)
 {
 	g_Zoom = Effekseer::Max(MinZoom, Effekseer::Min(MaxZoom, zoom));
 }
 
-float GetDistance()
+float Native::GetDistance()
 {
 	return DistanceBase * powf(ZoomDistanceFactor, g_Zoom);
 }
 
-float GetOrthoScale()
+float Native::GetOrthoScale()
 {
 	return OrthoScaleBase / powf(ZoomDistanceFactor, g_Zoom);
 }
@@ -199,7 +206,7 @@ ViewerParamater::ViewerParamater()
 	, CullingZ(0)
 
 	, Distortion(Effekseer::Tool::DistortionType::Current)
-	, RenderingMode(RenderMode::Normal)
+	, RenderingMode(Effekseer::Tool::RenderingMethodType::Normal)
 	, ViewerMode(ViewMode::_3D)
 
 {
@@ -221,22 +228,7 @@ static efk::DeviceType g_deviceType = efk::DeviceType::OpenGL;
 
 Native::TextureLoader::TextureLoader(efk::Graphics* graphics, Effekseer::ColorSpaceType colorSpaceType)
 {
-	if (g_deviceType == efk::DeviceType::OpenGL)
-	{
-		auto g = static_cast<efk::GraphicsGL*>(graphics);
-		m_originalTextureLoader = EffekseerRendererGL::CreateTextureLoader(g->GetGraphicsDevice(), nullptr, colorSpaceType);
-	}
-#ifdef _WIN32
-	else if (g_deviceType == efk::DeviceType::DirectX11)
-	{
-		auto g = static_cast<efk::GraphicsDX11*>(graphics);
-		m_originalTextureLoader = EffekseerRendererDX11::CreateTextureLoader(g->GetGraphicsDevice(), nullptr, colorSpaceType);
-	}
-	else
-	{
-		assert(0);
-	}
-#endif
+	m_originalTextureLoader = EffekseerRenderer::CreateTextureLoader(graphics->GetGraphicsDevice(), nullptr, colorSpaceType);
 }
 
 Native::TextureLoader::~TextureLoader()
@@ -319,38 +311,15 @@ Effekseer::ModelRef Native::ModelLoader::Load(const char16_t* path)
 	}
 	else
 	{
-		if (g_deviceType == efk::DeviceType::OpenGL)
+		auto loader = ::EffekseerRenderer::CreateModelLoader(graphics_->GetGraphicsDevice());
+		auto m = loader->Load((const char16_t*)dst);
+
+		if (m != nullptr)
 		{
-			auto loader = ::EffekseerRendererGL::CreateModelLoader();
-			auto m = (Effekseer::ModelRef)loader->Load((const char16_t*)dst);
-
-			if (m != nullptr)
-			{
-				m_models[key] = m;
-			}
-
-			return m;
+			m_models[key] = m;
 		}
-#ifdef _WIN32
-		else if (g_deviceType == efk::DeviceType::DirectX11)
-		{
-			auto g = static_cast<efk::GraphicsDX11*>(graphics_);
-			auto loader = ::EffekseerRendererDX11::CreateModelLoader(g->GetGraphicsDevice());
-			auto m = (Effekseer::ModelRef)loader->Load((const char16_t*)dst);
 
-			if (m != nullptr)
-			{
-				m_models[key] = m;
-			}
-
-			return m;
-		}
-		else
-		{
-			assert(0);
-			return nullptr;
-		}
-#endif
+		return m;
 	}
 }
 
@@ -438,8 +407,6 @@ void Native::MaterialLoader::ReleaseAll()
 }
 
 Native::Native()
-	: m_time(0)
-	, m_step(1)
 {
 	g_client = Effekseer::Client::Create();
 
@@ -468,7 +435,6 @@ Native::~Native()
 bool Native::CreateWindow_Effekseer(void* pHandle, int width, int height, bool isSRGBMode, efk::DeviceType deviceType)
 {
 	spdlog::trace("Begin Native::CreateWindow_Effekseer");
-	m_isSRGBMode = isSRGBMode;
 	g_deviceType = deviceType;
 
 	// because internal buffer is 16bit
@@ -490,7 +456,7 @@ bool Native::CreateWindow_Effekseer(void* pHandle, int width, int height, bool i
 #endif
 	spdlog::trace("OK new ::efk::Graphics");
 
-	if (!graphics_->Initialize(pHandle, width, height, m_isSRGBMode))
+	if (!graphics_->Initialize(pHandle, width, height))
 	{
 		spdlog::trace("Graphics::Initialize(false)");
 		ES_SAFE_DELETE(graphics_);
@@ -709,6 +675,20 @@ bool Native::LoadEffect(void* pData, int size, const char16_t* Path)
 	{
 		mainScreen_->SetEffect(effect_);
 	}
+
+	// Create UserData while assigning NodeId.
+	{
+		int nextEditorNodeId = 1;
+		const auto& visitor = [&](::Effekseer::EffectNodeImplemented* node) {
+			auto userData = ::Effekseer::MakeRefPtr<EditorEffectNodeUserData>();
+			userData->editorNodeId_ = nextEditorNodeId;
+			node->SetRenderingUserData(userData);
+			nextEditorNodeId++;
+			return true;
+		};
+		static_cast<::Effekseer::EffectNodeImplemented*>(effect_->GetRoot())->Traverse(visitor);
+	}
+
 	return true;
 }
 
@@ -795,12 +775,12 @@ bool Native::Rotate(float x, float y)
 
 bool Native::Slide(float x, float y)
 {
-	if (::g_mouseSlideDirectionInvX)
+	if (g_mouseSlideDirectionInvX)
 	{
 		x = -x;
 	}
 
-	if (::g_mouseSlideDirectionInvY)
+	if (g_mouseSlideDirectionInvY)
 	{
 		y = -y;
 	}
@@ -850,12 +830,11 @@ bool Native::SetRandomSeed(int seed)
 
 void* Native::RenderView(int32_t width, int32_t height)
 {
-	mainScreen_->GetRenderer()->SetRenderMode((Effekseer::RenderMode)viewPointCtrl_.RenderingMode);
 	viewPointCtrl_.SetScreenSize(width, height);
 	mainScreenConfig_.DrawParameter = drawParameter;
 	mainScreenConfig_.CameraMatrix = viewPointCtrl_.GetCameraMatrix();
 	mainScreenConfig_.ProjectionMatrix = viewPointCtrl_.GetProjectionMatrix();
-	mainScreenConfig_.RenderMode = viewPointCtrl_.RenderingMode;
+	mainScreenConfig_.RenderingMethod = viewPointCtrl_.RenderingMode;
 	mainScreen_->SetConfig(mainScreenConfig_);
 	mainScreen_->Resize(Effekseer::Tool::Vector2DI(width, height));
 	mainScreen_->Render();
@@ -868,7 +847,7 @@ bool Native::BeginRecord(const RecordingParameter& recordingParameter)
 		return false;
 
 	recorder.reset(new Effekseer::Tool::Recorder());
-	return recorder->Begin(mainScreen_, graphics_, setting_, recordingParameter, Effekseer::Tool::Vector2DI(mainScreen_->GuideWidth, mainScreen_->GuideHeight), m_isSRGBMode, behavior_, effect_);
+	return recorder->Begin(mainScreen_, graphics_, setting_, recordingParameter, Effekseer::Tool::Vector2DI(mainScreen_->GuideWidth, mainScreen_->GuideHeight), mainScreen_->GetIsSRGBMode(), behavior_, effect_);
 }
 
 bool Native::StepRecord(int frames)
@@ -949,7 +928,7 @@ ViewerParamater Native::GetViewerParamater()
 	paramater.RateOfMagnification = viewPointCtrl_.RateOfMagnification;
 
 	paramater.Distortion = (Effekseer::Tool::DistortionType)mainScreenConfig_.Distortion;
-	paramater.RenderingMode = (RenderMode)viewPointCtrl_.RenderingMode;
+	paramater.RenderingMode = viewPointCtrl_.RenderingMode;
 
 	return paramater;
 }
@@ -983,7 +962,7 @@ void Native::SetViewerParamater(ViewerParamater& paramater)
 
 	mainScreen_->RendersGuide = paramater.RendersGuide;
 	mainScreenConfig_.Distortion = (Effekseer::Tool::DistortionType)paramater.Distortion;
-	viewPointCtrl_.RenderingMode = (::Effekseer::RenderMode)paramater.RenderingMode;
+	viewPointCtrl_.RenderingMode = paramater.RenderingMode;
 }
 
 Effekseer::Tool::ViewerEffectBehavior Native::GetEffectBehavior()
@@ -1053,14 +1032,9 @@ bool Native::InvalidateTextureCache()
 
 void Native::SetGroundParameters(bool shown, float height, int32_t extent)
 {
-	mainScreen_->IsGroundShown = shown;
-	mainScreen_->GroundHeight = height;
-
-	if (mainScreen_->GroundExtent != extent)
-	{
-		mainScreen_->GroundExtent = extent;
-		mainScreen_->UpdateGround();
-	}
+	mainScreenConfig_.IsGroundShown = shown;
+	mainScreenConfig_.GroundHeight = height;
+	mainScreenConfig_.GroundExtent = extent;
 }
 
 void Native::SetIsGridShown(bool value, bool xy, bool xz, bool yz)
@@ -1103,7 +1077,6 @@ void Native::SetMouseInverseFlag(bool rotX, bool rotY, bool slideX, bool slideY)
 void Native::SetStep(int32_t step)
 {
 	mainScreen_->SetStep(step);
-	m_step = step;
 }
 
 bool Native::StartNetwork(const char* host, uint16_t port)
@@ -1128,9 +1101,7 @@ void Native::SendDataByNetwork(const char16_t* key, void* data, int size, const 
 
 void Native::SetLightDirection(float x, float y, float z)
 {
-	g_lightDirection = Effekseer::Vector3D(x, y, z);
-
-	Effekseer::Vector3D temp = g_lightDirection;
+	Effekseer::Vector3D temp = Effekseer::Vector3D(x, y, z);
 
 	if (!viewPointCtrl_.IsRightHand)
 	{
@@ -1193,24 +1164,7 @@ efk::ImageResource* Native::LoadImageResource(const char16_t* path)
 		return it->second.get();
 	}
 
-	Effekseer::TextureLoaderRef loader = nullptr;
-	if (g_deviceType == efk::DeviceType::OpenGL)
-	{
-		auto r = (EffekseerRendererGL::Renderer*)mainScreen_->GetRenderer().Get();
-		loader = EffekseerRendererGL::CreateTextureLoader(r->GetGraphicsDevice());
-	}
-#ifdef _WIN32
-	else if (g_deviceType == efk::DeviceType::DirectX11)
-	{
-		auto r = (EffekseerRendererDX11::Renderer*)mainScreen_->GetRenderer().Get();
-		loader = EffekseerRendererDX11::CreateTextureLoader(r->GetGraphicsDevice());
-	}
-	else
-	{
-		assert(0);
-	}
-#endif
-
+	auto loader = EffekseerRenderer::CreateTextureLoader(graphics_->GetGraphicsDevice());
 	auto resource = std::make_shared<efk::ImageResource>(g_deviceType, loader);
 	resource->SetPath(path);
 
@@ -1317,6 +1271,23 @@ bool Native::GetIsUpdateMaterialRequiredAndReset()
 	auto ret = isUpdateMaterialRequired_;
 	isUpdateMaterialRequired_ = false;
 	return ret;
+}
+
+bool Native::GetNodeLifeTimes(int32_t nodeId, int32_t* frameMin, int32_t* frameMax)
+{
+	if (!effect_.Get()) return false;
+
+	if (auto* effect = dynamic_cast<Effekseer::EffectImplemented*>(effect_.Get())) {
+		if (auto* node = EditorEffectNodeUserData::FindNodeByEditorNodeId(effect, nodeId)) {
+			Effekseer::EffectInstanceTerm term;
+			auto cterm = node->CalculateInstanceTerm(term);
+			*frameMin = cterm.FirstInstanceStartMin;
+			*frameMax = cterm.LastInstanceEndMax;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void Native::SetFileLogger(const char16_t* path)

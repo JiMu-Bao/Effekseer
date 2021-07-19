@@ -2,16 +2,160 @@
 
 #ifdef _WIN32
 #include "Graphics/Platform/DX11/efk.GraphicsDX11.h"
+
+namespace WhiteParticle_Model_VS
+{
+#include <EffekseerRendererDX11/EffekseerRenderer/ShaderHeader/model_unlit_vs.h>
+}
+
+namespace WhiteParticle_Sprite_VS
+{
+#include <EffekseerRendererDX11/EffekseerRenderer/ShaderHeader/sprite_unlit_vs.h>
+}
+
+namespace WhiteParticle_PS
+{
+#include "Shaders/HLSL_DX11_Header/white_particle_ps.h"
+}
+
+namespace PostEffect_Basic_VS
+{
+#include "Shaders/HLSL_DX11_Header/postfx_basic_vs.h"
+}
+
+namespace PostEffect_Overdraw_PS
+{
+#include "Shaders/HLSL_DX11_Header/postfx_overdraw_ps.h"
+}
+
 #endif
+
+#include "../EffekseerRendererGL/EffekseerRenderer/EffekseerRendererGL.ModelRenderer.h"
+
+#include "Shaders/GLSL_GL_Header/line_ps.h"
+#include "Shaders/GLSL_GL_Header/line_vs.h"
+
+#include "Shaders/GLSL_GL_Header/postfx_basic_vs.h"
+#include "Shaders/GLSL_GL_Header/postfx_overdraw_ps.h"
+#include "Shaders/GLSL_GL_Header/white_particle_ps.h"
 
 #include "Graphics/Platform/GL/efk.GraphicsGL.h"
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
+#include "../EffekseerRendererGL/EffekseerRenderer/ShaderHeader/model_unlit_vs.h"
+#include "../EffekseerRendererGL/EffekseerRenderer/ShaderHeader/sprite_unlit_vs.h"
+
 namespace Effekseer
 {
 namespace Tool
 {
+
+bool GroundRenderer::Initialize(Effekseer::RefPtr<Effekseer::Backend::GraphicsDevice> graphicsDevice)
+{
+	groudMeshRenderer_ = Effekseer::Tool::StaticMeshRenderer::Create(graphicsDevice);
+
+	if (groudMeshRenderer_ == nullptr)
+	{
+		return false;
+	}
+
+	Effekseer::CustomVector<Effekseer::Tool::StaticMeshVertex> vbData(4);
+	Effekseer::CustomVector<int32_t> ibData = {0, 1, 2, 0, 2, 3};
+
+	auto groudMesh = Effekseer::Tool::StaticMesh::Create(graphicsDevice, vbData, ibData, true);
+
+	// Create checker patterns
+	Effekseer::Backend::TextureParameter texParams;
+	texParams.Format = Effekseer::Backend::TextureFormatType::R8G8B8A8_UNORM;
+	texParams.Size = {128, 128};
+	texParams.InitialData.resize(texParams.Size[0] * texParams.Size[1] * 4);
+	for (size_t i = 0; i < texParams.InitialData.size() / 4; i++)
+	{
+		const size_t x = i % texParams.Size[0] * 2 / texParams.Size[0];
+		const size_t y = i / texParams.Size[1] * 2 / texParams.Size[1];
+		if (x ^ y == 0)
+		{
+			texParams.InitialData[i * 4 + 0] = 90;
+			texParams.InitialData[i * 4 + 1] = 90;
+			texParams.InitialData[i * 4 + 2] = 90;
+			texParams.InitialData[i * 4 + 3] = 255;
+		}
+		else
+		{
+			texParams.InitialData[i * 4 + 0] = 60;
+			texParams.InitialData[i * 4 + 1] = 60;
+			texParams.InitialData[i * 4 + 2] = 60;
+			texParams.InitialData[i * 4 + 3] = 255;
+		}
+	}
+	groudMesh->Texture = graphicsDevice->CreateTexture(texParams);
+
+	groudMeshRenderer_->SetStaticMesh(groudMesh);
+
+	UpdateGround();
+
+	return true;
+}
+
+void GroundRenderer::SetExtent(int32_t extent)
+{
+	if (GroundExtent == extent)
+	{
+		return;
+	}
+
+	GroundExtent = extent;
+	UpdateGround();
+}
+
+void GroundRenderer::UpdateGround()
+{
+	std::array<Effekseer::Tool::StaticMeshVertex, 4> vbData;
+
+	vbData[0].Pos = {-(float)GroundExtent, 0.0f, -(float)GroundExtent};
+	vbData[0].VColor = {255, 255, 255, 255};
+	vbData[0].UV = {0.0f, 0.0f};
+	vbData[1].Pos = {(float)GroundExtent, 0.0f, -(float)GroundExtent};
+	vbData[1].VColor = {255, 255, 255, 255};
+	vbData[1].UV = {(float)GroundExtent, 0.0f};
+	vbData[2].Pos = {(float)GroundExtent, 0.0f, (float)GroundExtent};
+	vbData[2].VColor = {255, 255, 255, 255};
+	vbData[2].UV = {(float)GroundExtent, (float)GroundExtent};
+	vbData[3].Pos = {-(float)GroundExtent, 0.0f, (float)GroundExtent};
+	vbData[3].VColor = {255, 255, 255, 255};
+	vbData[3].UV = {0.0f, (float)GroundExtent};
+
+	for (auto& vb : vbData)
+	{
+		vb.Normal = {0.0f, 1.0f, 0.0f};
+	}
+
+	groudMeshRenderer_->GetStaticMesh()->GetVertexBuffer()->UpdateData(
+		vbData.data(), static_cast<int32_t>(vbData.size() * sizeof(Effekseer::Tool::StaticMeshVertex)), 0);
+}
+
+void GroundRenderer::Render(EffekseerRenderer::RendererRef renderer)
+{
+	Effekseer::Tool::RendererParameter param{};
+	param.CameraMatrix = renderer->GetCameraMatrix();
+	param.ProjectionMatrix = renderer->GetProjectionMatrix();
+	param.WorldMatrix.Translation(0.0f, GroundHeight, 0.0f);
+	param.DirectionalLightDirection = renderer->GetLightDirection().ToFloat4();
+	param.DirectionalLightColor = renderer->GetLightColor().ToFloat4();
+	param.AmbientLightColor = renderer->GetLightAmbientColor().ToFloat4();
+	groudMeshRenderer_->Render(param);
+}
+
+std::shared_ptr<GroundRenderer> GroundRenderer::Create(Effekseer::RefPtr<Effekseer::Backend::GraphicsDevice> graphicsDevice)
+{
+	auto ret = std::make_shared<GroundRenderer>();
+	if (ret->Initialize(graphicsDevice))
+	{
+		return ret;
+	}
+	return nullptr;
+}
 
 RenderedEffectGenerator::DistortingCallback::DistortingCallback(efk::Graphics* graphics, RenderedEffectGenerator* generator)
 	: graphics_(graphics)
@@ -33,10 +177,11 @@ bool RenderedEffectGenerator::DistortingCallback::OnDistorting(EffekseerRenderer
 	return IsEnabled;
 }
 
-void RenderedEffectGenerator::UpdateBackgroundMesh(const Color& backgroundColor)
+bool RenderedEffectGenerator::UpdateBackgroundMesh(const Color& backgroundColor)
 {
 	if (backgroundMesh_ != nullptr && !(backgroundColor != backgroundMeshColor_))
-		return;
+		return true;
+
 	backgroundMeshColor_ = backgroundColor;
 
 	const float eps = 0.00001f;
@@ -66,9 +211,16 @@ void RenderedEffectGenerator::UpdateBackgroundMesh(const Color& backgroundColor)
 	ibData[5] = 3;
 
 	backgroundMesh_ = Effekseer::Tool::StaticMesh::Create(graphics_->GetGraphicsDevice(), vbData, ibData);
+	if (!backgroundMesh_)
+	{
+		return false;
+	}
+
 	backgroundMesh_->IsLit = false;
 
 	backgroundRenderer_->SetStaticMesh(backgroundMesh_);
+
+	return true;
 }
 
 void RenderedEffectGenerator::PlayEffect()
@@ -184,20 +336,20 @@ bool RenderedEffectGenerator::Initialize(efk::Graphics* graphics, Effekseer::Ref
 
 	spdlog::trace("OK PostProcessing");
 
-	auto msaaSampleHDR = graphics->GetMultisampleLevel(efk::TextureFormat::RGBA16F);
-	auto msaaSample = graphics->GetMultisampleLevel(efk::TextureFormat::RGBA8U);
+	auto msaaSampleHDR = graphics->GetMultisampleLevel(Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT);
+	auto msaaSample = graphics->GetMultisampleLevel(Effekseer::Backend::TextureFormatType::R8G8B8A8_UNORM);
 
-	auto isHDRSupported = graphics->CheckFormatSupport(efk::TextureFormat::RGBA16F, efk::TextureFeatureType::Texture2D);
+	auto isHDRSupported = graphics->CheckFormatSupport(Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT, efk::TextureFeatureType::Texture2D);
 	auto isMSAAHDRSupported =
-		graphics->CheckFormatSupport(efk::TextureFormat::RGBA16F, efk::TextureFeatureType::Texture2D) &&
-		graphics->CheckFormatSupport(efk::TextureFormat::RGBA16F, efk::TextureFeatureType::MultisampledTexture2DResolve) &&
-		graphics->CheckFormatSupport(efk::TextureFormat::RGBA16F, efk::TextureFeatureType::MultisampledTexture2DRenderTarget) &&
+		graphics->CheckFormatSupport(Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT, efk::TextureFeatureType::Texture2D) &&
+		graphics->CheckFormatSupport(Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT, efk::TextureFeatureType::MultisampledTexture2DResolve) &&
+		graphics->CheckFormatSupport(Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT, efk::TextureFeatureType::MultisampledTexture2DRenderTarget) &&
 		msaaSampleHDR > 1;
 	auto isMSAASupported = msaaSample > 1;
 
 	if (isHDRSupported || isMSAAHDRSupported)
 	{
-		textureFormat_ = efk::TextureFormat::RGBA16F;
+		textureFormat_ = Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT;
 
 		if (isMSAAHDRSupported)
 		{
@@ -219,7 +371,7 @@ bool RenderedEffectGenerator::Initialize(efk::Graphics* graphics, Effekseer::Ref
 			msaaSamples = 1;
 		}
 
-		textureFormat_ = efk::TextureFormat::RGBA8U;
+		textureFormat_ = Effekseer::Backend::TextureFormatType::R8G8B8A8_UNORM;
 	}
 
 	spdlog::trace("HDR {} {}", isMSAAHDRSupported, isHDRSupported);
@@ -236,7 +388,7 @@ bool RenderedEffectGenerator::Initialize(efk::Graphics* graphics, Effekseer::Ref
 
 	if (sprite_renderer == nullptr)
 	{
-		spdlog::trace("FAIL : CreateSpriteRenderer");
+		spdlog::warn("FAIL : CreateSpriteRenderer");
 		return false;
 	}
 
@@ -253,10 +405,97 @@ bool RenderedEffectGenerator::Initialize(efk::Graphics* graphics, Effekseer::Ref
 
 		backgroundRenderer_ = Effekseer::Tool::StaticMeshRenderer::Create(graphics_->GetGraphicsDevice());
 
-		if (backgroundRenderer_ == nullptr)
+		if (backgroundRenderer_ != nullptr && UpdateBackgroundMesh(config_.BackgroundColor))
 		{
+			spdlog::trace("OK : Background");
+		}
+		else
+		{
+			spdlog::warn("FAIL : Background");
 			return false;
 		}
+	}
+
+	groundRenderer_ = GroundRenderer::Create(graphics->GetGraphicsDevice());
+	if (groundRenderer_)
+	{
+		spdlog::trace("OK : GroundRenderer");
+	}
+	else
+	{
+		spdlog::warn("FAIL : GroundRenderer");
+	}
+
+	if (graphics->GetGraphicsDevice()->GetDeviceName() == "DirectX11")
+	{
+#ifdef _WIN32
+		whiteParticleSpriteShader_ =
+			graphics->GetGraphicsDevice()->CreateShaderFromBinary(
+				WhiteParticle_Sprite_VS::g_main,
+				sizeof(WhiteParticle_Sprite_VS::g_main),
+				WhiteParticle_PS::g_main,
+				sizeof(WhiteParticle_PS::g_main));
+
+		whiteParticleModelShader_ =
+			graphics->GetGraphicsDevice()->CreateShaderFromBinary(
+				WhiteParticle_Model_VS::g_main,
+				sizeof(WhiteParticle_Model_VS::g_main),
+				WhiteParticle_PS::g_main,
+				sizeof(WhiteParticle_PS::g_main));
+
+		auto shader = graphics_->GetGraphicsDevice()->CreateShaderFromBinary(
+			PostEffect_Basic_VS::g_main,
+			sizeof(PostEffect_Basic_VS::g_main),
+			PostEffect_Overdraw_PS::g_main,
+			sizeof(PostEffect_Overdraw_PS::g_main));
+
+		overdrawEffect_ = std::make_unique<PostProcess>(graphics_->GetGraphicsDevice(), shader, 0, 0);
+#endif
+	}
+	else if (graphics->GetGraphicsDevice()->GetDeviceName() == "OpenGL")
+	{
+		const auto texLocUnlit = EffekseerRendererGL::GetTextureLocations(EffekseerRenderer::RendererShaderType::Unlit);
+
+		{
+			Effekseer::CustomVector<Effekseer::Backend::UniformLayoutElement> uniformLayoutElementsLitUnlit;
+			EffekseerRendererGL::AddVertexUniformLayout(uniformLayoutElementsLitUnlit);
+			EffekseerRendererGL::AddPixelUniformLayout(uniformLayoutElementsLitUnlit);
+			auto uniformLayoutUnlitAd = Effekseer::MakeRefPtr<Effekseer::Backend::UniformLayout>(texLocUnlit, uniformLayoutElementsLitUnlit);
+
+			whiteParticleSpriteShader_ = graphics->GetGraphicsDevice()->CreateShaderFromCodes(
+				{get_sprite_unlit_vs(EffekseerRendererGL::OpenGLDeviceType::OpenGL3)},
+				{gl_white_particle_ps},
+				uniformLayoutUnlitAd);
+		}
+
+		{
+			Effekseer::CustomVector<Effekseer::Backend::UniformLayoutElement> uniformLayoutElementsLitUnlit;
+			EffekseerRendererGL::AddModelVertexUniformLayout(uniformLayoutElementsLitUnlit, false, true, EffekseerRendererGL::OpenGLInstancingCount);
+			EffekseerRendererGL::AddPixelUniformLayout(uniformLayoutElementsLitUnlit);
+			auto uniformLayoutUnlitAd = Effekseer::MakeRefPtr<Effekseer::Backend::UniformLayout>(texLocUnlit, uniformLayoutElementsLitUnlit);
+
+			whiteParticleModelShader_ = graphics->GetGraphicsDevice()->CreateShaderFromCodes(
+				{get_model_unlit_vs(EffekseerRendererGL::OpenGLDeviceType::OpenGL3)},
+				{gl_white_particle_ps},
+				uniformLayoutUnlitAd);
+		}
+
+		{
+			Effekseer::CustomVector<Effekseer::CustomString<char>> tecLoc{"Sampler_g_sampler"};
+			Effekseer::CustomVector<Effekseer::Backend::UniformLayoutElement> elms;
+			auto uniformLayoutUnlitAd = Effekseer::MakeRefPtr<Effekseer::Backend::UniformLayout>(tecLoc, elms);
+
+			auto shader = graphics_->GetGraphicsDevice()->CreateShaderFromCodes(
+				{gl_postfx_basic_vs},
+				{gl_postfx_overdraw_ps},
+				uniformLayoutUnlitAd);
+
+			overdrawEffect_ = std::make_unique<PostProcess>(graphics_->GetGraphicsDevice(), shader, 0, 0);
+		}
+	}
+	else
+	{
+		spdlog::warn("Overdraw is not suppoted.");
 	}
 
 	return true;
@@ -281,11 +520,11 @@ void RenderedEffectGenerator::Resize(const Vector2DI screenSize)
 	if (msaaSamples > 1)
 	{
 		depthRenderTextureMSAA = std::shared_ptr<efk::RenderTexture>(efk::RenderTexture::Create(graphics_));
-		depthRenderTextureMSAA->Initialize(screenSize, efk::TextureFormat::R32F, msaaSamples);
+		depthRenderTextureMSAA->Initialize(screenSize, Effekseer::Backend::TextureFormatType::R32_FLOAT, msaaSamples);
 	}
 
 	depthRenderTexture = std::shared_ptr<efk::RenderTexture>(efk::RenderTexture::Create(graphics_));
-	depthRenderTexture->Initialize(screenSize, efk::TextureFormat::R32F, 1);
+	depthRenderTexture->Initialize(screenSize, Effekseer::Backend::TextureFormatType::R32_FLOAT, 1);
 
 	if (msaaSamples > 1)
 	{
@@ -303,7 +542,7 @@ void RenderedEffectGenerator::Resize(const Vector2DI screenSize)
 	}
 
 	viewRenderTexture = std::shared_ptr<efk::RenderTexture>(efk::RenderTexture::Create(graphics_));
-	viewRenderTexture->Initialize(screenSize, efk::TextureFormat::RGBA8U);
+	viewRenderTexture->Initialize(screenSize, Effekseer::Backend::TextureFormatType::R8G8B8A8_UNORM);
 }
 
 void RenderedEffectGenerator::Update()
@@ -446,7 +685,7 @@ void RenderedEffectGenerator::Update(int32_t frame)
 
 		for (int i = 0; i < frame - updatingTime; i++)
 		{
-			Update();		
+			Update();
 		}
 	}
 }
@@ -454,56 +693,81 @@ void RenderedEffectGenerator::Update(int32_t frame)
 void RenderedEffectGenerator::Render()
 {
 	// Clear a destination texture
-	UpdateBackgroundMesh(config_.BackgroundColor);
-
-	graphics_->SetRenderTarget(viewRenderTexture.get(), nullptr);
-	if (config_.BackgroundColor.A != 255)
+	if (config_.RenderingMethod == RenderingMethodType::Overdraw)
 	{
-		graphics_->Clear(config_.BackgroundColor);
+		UpdateBackgroundMesh({0, 0, 0, 0});
+	}
+	else if (backgroundTexture_ != nullptr && backgroundTexture_->GetBackend() != nullptr)
+	{
+		UpdateBackgroundMesh({255, 255, 255, 255});
+	}
+	else
+	{
+		UpdateBackgroundMesh(config_.BackgroundColor);
 	}
 
-	renderer_->SetRenderMode(config_.RenderMode);
+	graphics_->SetRenderTarget({viewRenderTexture->GetAsBackend()}, nullptr);
+	graphics_->Clear({0, 0, 0, 0});
+
+	// clear
+	if (msaaSamples > 1)
+	{
+		graphics_->SetRenderTarget({hdrRenderTextureMSAA->GetAsBackend(), depthRenderTextureMSAA->GetAsBackend()}, depthTexture->GetAsBackend());
+	}
+	else
+	{
+		graphics_->SetRenderTarget({hdrRenderTexture->GetAsBackend(), depthRenderTexture->GetAsBackend()}, depthTexture->GetAsBackend());
+	}
+
+	graphics_->Clear({0, 0, 0, 0});
+
+	// TODO : refactor
 	renderer_->SetCameraMatrix(config_.CameraMatrix);
 	renderer_->SetProjectionMatrix(config_.ProjectionMatrix);
 	renderer_->SetLightDirection(config_.LightDirection);
 	renderer_->SetLightColor(config_.LightColor);
 	renderer_->SetLightAmbientColor(config_.LightAmbientColor);
 
-	// clear
-	if (msaaSamples > 1)
+	if (backgroundRenderer_ != nullptr && backgroundMesh_ != nullptr)
 	{
-		auto rs = std::array<efk::RenderTexture*, 2>{hdrRenderTextureMSAA.get(), depthRenderTextureMSAA.get()};
-		graphics_->SetRenderTarget(rs.data(), 2, depthTexture.get());
-	}
-	else
-	{
-		auto rs = std::array<efk::RenderTexture*, 2>{hdrRenderTexture.get(), depthRenderTexture.get()};
-		graphics_->SetRenderTarget(rs.data(), 2, depthTexture.get());
-	}
+		if (backgroundTexture_ != nullptr)
+		{
+			backgroundMesh_->Texture = backgroundTexture_->GetBackend();
+		}
+		else
+		{
+			backgroundMesh_->Texture = nullptr;
+		}
 
-	graphics_->Clear(config_.BackgroundColor);
-
-	{
 		Effekseer::Tool::RendererParameter param{};
 		param.CameraMatrix.Indentity();
 		param.ProjectionMatrix.Indentity();
+		param.WorldMatrix.Indentity();
 		backgroundRenderer_->Render(param);
+	}
+
+	if (config_.RenderingMethod != RenderingMethodType::Overdraw)
+	{
+		if (groundRenderer_ != nullptr && config_.IsGroundShown)
+		{
+			groundRenderer_->Render(renderer_);
+		}
 	}
 
 	OnAfterClear();
 
 	if (msaaSamples > 1)
 	{
-		graphics_->SetRenderTarget(hdrRenderTextureMSAA.get(), depthTexture.get());
+		graphics_->SetRenderTarget({hdrRenderTextureMSAA->GetAsBackend()}, depthTexture->GetAsBackend());
 	}
 	else
 	{
-		graphics_->SetRenderTarget(hdrRenderTexture.get(), depthTexture.get());
+		graphics_->SetRenderTarget({hdrRenderTexture->GetAsBackend()}, depthTexture->GetAsBackend());
 	}
 
 	if (msaaSamples > 1)
 	{
-		graphics_->ResolveRenderTarget(depthRenderTextureMSAA.get(), depthRenderTexture.get());
+		graphics_->ResolveRenderTarget(depthRenderTextureMSAA->GetAsBackend(), depthRenderTexture->GetAsBackend());
 	}
 
 	EffekseerRenderer::DepthReconstructionParameter reconstructionParam;
@@ -516,8 +780,25 @@ void RenderedEffectGenerator::Render()
 
 	renderer_->SetDepth(depthRenderTexture->GetAsBackend(), reconstructionParam);
 
-	// HACK : grid renderer changes RenderMode
-	renderer_->SetRenderMode(config_.RenderMode);
+	if (config_.RenderingMethod == RenderingMethodType::Overdraw)
+	{
+		auto external = std::make_shared<EffekseerRenderer::ExternalShaderSettings>();
+		external->Blend = Effekseer::AlphaBlendType::Add;
+		external->StandardShader = whiteParticleSpriteShader_;
+		external->ModelShader = whiteParticleModelShader_;
+		renderer_->SetExternalShaderSettings(external);
+	}
+
+	if (config_.RenderingMethod == RenderingMethodType::Normal ||
+		config_.RenderingMethod == RenderingMethodType::NormalWithWireframe ||
+		config_.RenderingMethod == RenderingMethodType::Overdraw)
+	{
+		renderer_->SetRenderMode(Effekseer::RenderMode::Normal);
+	}
+	else
+	{
+		renderer_->SetRenderMode(Effekseer::RenderMode::Wireframe);
+	}
 
 	// Distoriton
 	if (config_.Distortion == DistortionType::Current)
@@ -562,6 +843,29 @@ void RenderedEffectGenerator::Render()
 
 	renderer_->EndRendering();
 
+	if (config_.RenderingMethod == RenderingMethodType::NormalWithWireframe)
+	{
+		auto external = std::make_shared<EffekseerRenderer::ExternalShaderSettings>();
+		external->Blend = Effekseer::AlphaBlendType::Opacity;
+		external->StandardShader = whiteParticleSpriteShader_;
+		external->ModelShader = whiteParticleModelShader_;
+		renderer_->SetExternalShaderSettings(external);
+
+		renderer_->SetRenderMode(Effekseer::RenderMode::Wireframe);
+
+		renderer_->BeginRendering();
+
+		manager_->Draw(config_.DrawParameter);
+
+		renderer_->EndRendering();
+	}
+
+	if (config_.RenderingMethod == RenderingMethodType::NormalWithWireframe ||
+		config_.RenderingMethod == RenderingMethodType::Overdraw)
+	{
+		renderer_->SetExternalShaderSettings(nullptr);
+	}
+
 	ResetBack();
 
 	OnBeforePostprocess();
@@ -574,27 +878,37 @@ void RenderedEffectGenerator::Render()
 
 	if (msaaSamples > 1)
 	{
-		graphics_->ResolveRenderTarget(hdrRenderTextureMSAA.get(), hdrRenderTexture.get());
+		graphics_->ResolveRenderTarget(hdrRenderTextureMSAA->GetAsBackend(), hdrRenderTexture->GetAsBackend());
 	}
 
-	// Bloom processing (specifying the same target for src and dest is faster)
-	m_bloomEffect->Render(hdrRenderTexture.get(), hdrRenderTexture.get());
-
-	// Tone map processing
-	auto tonemapTerget = viewRenderTexture.get();
-	if (m_isSRGBMode)
+	if (config_.RenderingMethod == RenderingMethodType::Overdraw)
 	{
-		tonemapTerget = linearRenderTexture.get();
+		graphics_->SetRenderTarget({viewRenderTexture->GetAsBackend()}, nullptr);
+		overdrawEffect_->GetDrawParameter().TexturePtrs[0] = hdrRenderTexture->GetAsBackend();
+		overdrawEffect_->GetDrawParameter().TextureCount = 1;
+		overdrawEffect_->Render();
 	}
-
-	m_tonemapEffect->Render(hdrRenderTexture.get(), tonemapTerget);
-
-	if (m_isSRGBMode)
+	else
 	{
-		m_linearToSRGBEffect->Render(tonemapTerget, viewRenderTexture.get());
+		// Bloom processing (specifying the same target for src and dest is faster)
+		m_bloomEffect->Render(hdrRenderTexture->GetAsBackend(), hdrRenderTexture->GetAsBackend());
+
+		// Tone map processing
+		auto tonemapTerget = viewRenderTexture->GetAsBackend();
+		if (m_isSRGBMode)
+		{
+			tonemapTerget = linearRenderTexture->GetAsBackend();
+		}
+
+		m_tonemapEffect->Render(hdrRenderTexture->GetAsBackend(), tonemapTerget);
+
+		if (m_isSRGBMode)
+		{
+			m_linearToSRGBEffect->Render(tonemapTerget, viewRenderTexture->GetAsBackend());
+		}
 	}
 
-	graphics_->SetRenderTarget(nullptr, nullptr);
+	graphics_->SetRenderTarget({nullptr}, nullptr);
 }
 
 void RenderedEffectGenerator::Reset()
@@ -623,11 +937,11 @@ void RenderedEffectGenerator::CopyToBack()
 {
 	if (msaaSamples > 1)
 	{
-		graphics_->CopyTo(hdrRenderTextureMSAA.get(), backTexture.get());
+		graphics_->CopyTo(hdrRenderTextureMSAA->GetAsBackend(), backTexture->GetAsBackend());
 	}
 	else
 	{
-		graphics_->CopyTo(hdrRenderTexture.get(), backTexture.get());
+		graphics_->CopyTo(hdrRenderTexture->GetAsBackend(), backTexture->GetAsBackend());
 	}
 
 	renderer_->SetBackground(backTexture->GetAsBackend());

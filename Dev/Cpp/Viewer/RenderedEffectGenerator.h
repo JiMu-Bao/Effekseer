@@ -2,6 +2,7 @@
 #pragma once
 
 #include "EffekseerTool/EffekseerTool.Sound.h"
+#include "Graphics/PostProcess.h"
 #include "Graphics/StaticMeshRenderer.h"
 #include "Graphics/efk.Graphics.h"
 #include "Graphics/efk.PostEffects.h"
@@ -25,7 +26,30 @@ struct RenderedEffectGeneratorConfig
 	Effekseer::Vector3D LightDirection;
 	Effekseer::Color LightColor;
 	Effekseer::Color LightAmbientColor;
-	Effekseer::RenderMode RenderMode;
+	RenderingMethodType RenderingMethod;
+
+	bool IsGroundShown = false;
+	int32_t GroundExtent = 10;
+	float GroundHeight = 0.0f;
+};
+
+class GroundRenderer
+{
+private:
+	std::shared_ptr<Effekseer::Tool::StaticMeshRenderer> groudMeshRenderer_;
+	bool Initialize(Effekseer::RefPtr<Effekseer::Backend::GraphicsDevice> graphicsDevice);
+	int32_t GroundExtent = 10;
+
+public:
+	float GroundHeight = 0.0f;
+
+	void SetExtent(int32_t extent);
+
+	static std::shared_ptr<GroundRenderer> Create(Effekseer::RefPtr<Effekseer::Backend::GraphicsDevice> graphicsDevice);
+
+	void UpdateGround();
+
+	void Render(EffekseerRenderer::RendererRef renderer);
 };
 
 class RenderedEffectGenerator
@@ -73,6 +97,7 @@ protected:
 
 	std::shared_ptr<Effekseer::Tool::StaticMesh> backgroundMesh_;
 	std::shared_ptr<Effekseer::Tool::StaticMeshRenderer> backgroundRenderer_;
+	Effekseer::TextureRef backgroundTexture_;
 	Effekseer::Color backgroundMeshColor_{};
 
 	efk::RenderTexture* renderTexture_ = nullptr;
@@ -101,9 +126,11 @@ protected:
 	std::unique_ptr<efk::TonemapEffect> m_tonemapEffect;
 	std::unique_ptr<efk::LinearToSRGBEffect> m_linearToSRGBEffect;
 
+	std::unique_ptr<PostProcess> overdrawEffect_;
+
 	bool m_isSRGBMode = false;
 	uint32_t msaaSamples = 4;
-	efk::TextureFormat textureFormat_ = efk::TextureFormat::RGBA16F;
+	Effekseer::Backend::TextureFormatType textureFormat_ = Effekseer::Backend::TextureFormatType::R16G16B16A16_FLOAT;
 
 	::Effekseer::Vector3D m_rootLocation;
 	::Effekseer::Vector3D m_rootRotation;
@@ -116,9 +143,14 @@ protected:
 
 	DistortingCallback* m_distortionCallback = nullptr;
 
+	Effekseer::Backend::ShaderRef whiteParticleSpriteShader_;
+	Effekseer::Backend::ShaderRef whiteParticleModelShader_;
+
 	RenderedEffectGeneratorConfig config_;
 
-	void UpdateBackgroundMesh(const Color& backgroundColor);
+	std::shared_ptr<GroundRenderer> groundRenderer_;
+
+	bool UpdateBackgroundMesh(const Color& backgroundColor);
 
 public:
 	void PlayEffect();
@@ -192,6 +224,12 @@ public:
 	void SetConfig(const RenderedEffectGeneratorConfig& config)
 	{
 		config_ = config;
+
+		if (groundRenderer_ != nullptr)
+		{
+			groundRenderer_->SetExtent(config_.GroundExtent);
+			groundRenderer_->GroundHeight = config_.GroundHeight;
+		}
 	}
 
 	std::shared_ptr<efk::RenderTexture> GetView() const
@@ -211,6 +249,11 @@ public:
 	void SetSound(EffekseerTool::Sound* sound)
 	{
 		sound_ = sound;
+	}
+
+	bool GetIsSRGBMode() const
+	{
+		return m_isSRGBMode;
 	}
 };
 

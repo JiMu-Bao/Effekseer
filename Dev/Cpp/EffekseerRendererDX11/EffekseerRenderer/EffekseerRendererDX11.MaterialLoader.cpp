@@ -97,10 +97,11 @@ MaterialLoader ::~MaterialLoader()
 			};
 
 			shader = Shader::Create(renderer_.Get(),
-									(uint8_t*)binary->GetVertexShaderData(shaderTypes[st]),
-									binary->GetVertexShaderSize(shaderTypes[st]),
-									(uint8_t*)binary->GetPixelShaderData(shaderTypes[st]),
-									binary->GetPixelShaderSize(shaderTypes[st]),
+									renderer_->GetGraphicsDevice()->CreateShaderFromBinary(
+										(uint8_t*)binary->GetVertexShaderData(shaderTypes[st]),
+										binary->GetVertexShaderSize(shaderTypes[st]),
+										(uint8_t*)binary->GetPixelShaderData(shaderTypes[st]),
+										binary->GetPixelShaderSize(shaderTypes[st])),
 									"MaterialStandardRenderer",
 									decl,
 									ARRAYSIZE(decl),
@@ -125,8 +126,6 @@ MaterialLoader ::~MaterialLoader()
 			int index = 2;
 
 			auto getFormat = [](int32_t i) -> DXGI_FORMAT {
-				if (i == 1)
-					return DXGI_FORMAT_R32_FLOAT;
 				if (i == 2)
 					return DXGI_FORMAT_R32G32_FLOAT;
 				if (i == 3)
@@ -159,10 +158,11 @@ MaterialLoader ::~MaterialLoader()
 			}
 
 			shader = Shader::Create(renderer_.Get(),
-									(uint8_t*)binary->GetVertexShaderData(shaderTypes[st]),
-									binary->GetVertexShaderSize(shaderTypes[st]),
-									(uint8_t*)binary->GetPixelShaderData(shaderTypes[st]),
-									binary->GetPixelShaderSize(shaderTypes[st]),
+									renderer_->GetGraphicsDevice()->CreateShaderFromBinary(
+										(uint8_t*)binary->GetVertexShaderData(shaderTypes[st]),
+										binary->GetVertexShaderSize(shaderTypes[st]),
+										(uint8_t*)binary->GetPixelShaderData(shaderTypes[st]),
+										binary->GetPixelShaderSize(shaderTypes[st])),
 									"MaterialStandardRenderer",
 									decl,
 									count,
@@ -208,10 +208,11 @@ MaterialLoader ::~MaterialLoader()
 		std::string log;
 
 		auto shader = Shader::Create(renderer_.Get(),
-									 (uint8_t*)binary->GetVertexShaderData(shaderTypesModel[st]),
-									 binary->GetVertexShaderSize(shaderTypesModel[st]),
-									 (uint8_t*)binary->GetPixelShaderData(shaderTypesModel[st]),
-									 binary->GetPixelShaderSize(shaderTypesModel[st]),
+									 renderer_->GetGraphicsDevice()->CreateShaderFromBinary(
+										 (uint8_t*)binary->GetVertexShaderData(shaderTypesModel[st]),
+										 binary->GetVertexShaderSize(shaderTypesModel[st]),
+										 (uint8_t*)binary->GetPixelShaderData(shaderTypesModel[st]),
+										 binary->GetPixelShaderSize(shaderTypesModel[st])),
 									 "MaterialStandardModelRenderer",
 									 decl,
 									 ARRAYSIZE(decl),

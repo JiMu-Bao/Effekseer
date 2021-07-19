@@ -8,6 +8,8 @@
 #include "Effekseer.Base.Pre.h"
 #include "Effekseer.Resource.h"
 #include "Model/ProceduralModelGenerator.h"
+#include "Model//ProceduralModelParameter.h"
+#include <algorithm>
 
 //----------------------------------------------------------------------------------
 //
@@ -77,12 +79,12 @@ public:
 
 	ProceduralModelGeneratorRef GetProceduralMeshGenerator() const
 	{
-		return proceduralMeshGenerator_;
+		return proceduralMeshGenerator_.loader;
 	}
 
 	void SetProceduralMeshGenerator(ProceduralModelGeneratorRef generator)
 	{
-		proceduralMeshGenerator_ = generator;
+		proceduralMeshGenerator_.loader = generator;
 	}
 
 	TextureRef LoadTexture(const char16_t* path, TextureType textureType);
@@ -105,12 +107,20 @@ public:
 
 	void UnloadCurve(CurveRef resource);
 
-	ModelRef GenerateProceduralModel(const ProceduralModelParameter* param);
+	ModelRef GenerateProceduralModel(const ProceduralModelParameter& param);
 
 	void UngenerateProceduralModel(ModelRef resource);
 
+	void SetIsCacheEnabled(bool value)
+	{
+		cachedTextures_.isCacheEnabled = value;
+		cachedModels_.isCacheEnabled = value;
+		cachedMaterials_.isCacheEnabled = value;
+		cachedSounds_.isCacheEnabled = value;
+		cachedCurves_.isCacheEnabled = value;
+	}
+
 private:
-	ProceduralModelGeneratorRef proceduralMeshGenerator_;
 
 	template <typename T>
 	struct LoadCounted
@@ -122,27 +132,95 @@ private:
 	template <typename LOADER, typename RESOURCE>
 	struct CachedResources
 	{
+		bool isCacheEnabled = true;
 		LOADER loader;
-		CustomUnorderedMap<StringView, LoadCounted<RESOURCE>, StringView::Hash> cached;
+		CustomUnorderedMap<StringView<char16_t>, LoadCounted<RESOURCE>, StringView<char16_t>::Hash> cached;
 
 		template <typename... Arg>
 		RESOURCE Load(const char16_t* path, Arg&&... args)
 		{
 			if (loader != nullptr)
 			{
-				auto it = cached.find(path);
+				if (isCacheEnabled)
+				{
+					auto it = cached.find(path);
+					if (it != cached.end())
+					{
+						it->second.loadCount++;
+						return it->second.resource;
+					}
+
+					auto resource = loader->Load(path, args...);
+					if (resource != nullptr)
+					{
+						resource->SetPath(path);
+						const StringView<char16_t> view = resource->GetPath();
+						cached.emplace(view, LoadCounted<RESOURCE>{resource, 1});
+						return resource;
+					}
+				}
+				else
+				{
+					return loader->Load(path, args...);
+				}
+			}
+			return nullptr;
+		}
+
+		void Unload(const RESOURCE& resource)
+		{
+			if (loader != nullptr && resource != nullptr)
+			{
+				if (resource->GetPath() != u"")
+				{
+					auto it = cached.find(resource->GetPath());
+					if (it != cached.end())
+					{
+						if (--it->second.loadCount <= 0)
+						{
+							cached.erase(it);
+							loader->Unload(resource);
+						}
+					}
+				}
+				else
+				{
+					loader->Unload(resource);
+				}
+			}
+		}
+	};
+
+	template <typename PARAMETER, typename T>
+	struct GenerateCounted
+	{
+		PARAMETER param;
+		T resource;
+		int32_t loadCount;
+	};
+
+	template <typename LOADER, typename PARAMETER, typename RESOURCE>
+	struct CachedParameterResources
+	{
+		LOADER loader;
+		CustomMap<PARAMETER, GenerateCounted<PARAMETER, RESOURCE>> cached;
+
+		template <typename... Arg>
+		RESOURCE Load(const PARAMETER& parameter)
+		{
+			if (loader != nullptr)
+			{
+				auto it = cached.find(parameter);
 				if (it != cached.end())
 				{
 					it->second.loadCount++;
 					return it->second.resource;
 				}
 
-				auto resource = loader->Load(path, args...);
+				auto resource = loader->Generate(parameter);
 				if (resource != nullptr)
 				{
-					resource->SetPath(path);
-					const StringView view = resource->GetPath();
-					cached.emplace(view, LoadCounted<RESOURCE>{resource, 1});
+					cached.emplace(parameter, GenerateCounted<PARAMETER, RESOURCE>{parameter, resource, 1});
 					return resource;
 				}
 			}
@@ -153,13 +231,13 @@ private:
 		{
 			if (loader != nullptr && resource != nullptr)
 			{
-				auto it = cached.find(resource->GetPath());
+				auto it = std::find_if(cached.begin(), cached.end(), [&](const std::pair<PARAMETER, GenerateCounted<PARAMETER, RESOURCE>>& v) { return v.second.resource == resource; });
 				if (it != cached.end())
 				{
 					if (--it->second.loadCount <= 0)
 					{
 						cached.erase(it);
-						loader->Unload(resource);
+						loader->Ungenerate(resource);
 					}
 				}
 			}
@@ -171,6 +249,7 @@ private:
 	CachedResources<SoundLoaderRef, SoundDataRef> cachedSounds_;
 	CachedResources<MaterialLoaderRef, MaterialRef> cachedMaterials_;
 	CachedResources<CurveLoaderRef, CurveRef> cachedCurves_;
+	CachedParameterResources<ProceduralModelGeneratorRef, ProceduralModelParameter, ModelRef> proceduralMeshGenerator_;
 };
 
 //----------------------------------------------------------------------------------

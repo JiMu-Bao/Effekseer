@@ -114,7 +114,6 @@ void ServerImplemented::InternalClient::ShutDown()
 //
 //----------------------------------------------------------------------------------
 ServerImplemented::ServerImplemented()
-	: m_running(false)
 {
 	Socket::Initialize();
 }
@@ -342,12 +341,12 @@ void ServerImplemented::Update(ManagerRef* managers, int32_t managerCount, Reloa
 
 	for (auto& kv : m_effects)
 	{
-		if (kv.second.IsRegistering)
+		if (kv.second.IsRegistered)
 		{
 			continue;
 		}
 
-		kv.second.IsRegistering = false;
+		kv.second.IsRegistered = true;
 
 		auto key_ = kv.first;
 
@@ -403,20 +402,17 @@ void ServerImplemented::Update(ManagerRef* managers, int32_t managerCount, Reloa
 
 			if (m_effects.count(key) > 0)
 			{
-				if (managers != nullptr)
-				{
-					const auto& data_ = m_data[key];
+				const auto& data_ = m_data[key];
 
-					if (m_materialPath.size() > 1)
-					{
-						m_effects[key].EffectPtr->Reload(
-							managers, managerCount, data_.data(), (int32_t)data_.size(), m_materialPath.data(), reloadingThreadType);
-					}
-					else
-					{
-						m_effects[key].EffectPtr->Reload(managers, managerCount, data_.data(), (int32_t)data_.size(), nullptr, reloadingThreadType);
-					}
+				if (m_materialPath.size() > 1)
+				{
+					m_effects[key].EffectPtr->Reload(
+						managers, managerCount, data_.data(), (int32_t)data_.size(), m_materialPath.data(), reloadingThreadType);
 				}
+				else
+				{
+					m_effects[key].EffectPtr->Reload(managers, managerCount, data_.data(), (int32_t)data_.size(), nullptr, reloadingThreadType);
+				}	
 			}
 		}
 

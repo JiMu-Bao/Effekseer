@@ -77,6 +77,7 @@ class"
 %apply float *INOUT { float* movedY }
 %apply int *INOUT { int* changedType }
 %apply int INOUT[] { int* interporations }
+%apply int *INOUT { int* hovered }
 
 %apply uint8_t INOUT[] { uint8_t* kv_selected }
 
@@ -93,6 +94,13 @@ class"
 %shared_ptr(Effekseer::StaticFile);
 %shared_ptr(Effekseer::IO);
 %shared_ptr(Effekseer::IOCallback);
+
+// Timeline
+%apply int *INOUT { int* frameMin }
+%apply int *INOUT { int* frameMax }
+%apply int *INOUT { int* currentFrame }
+%apply int *INOUT { int* selectedEntry }
+%apply int *INOUT { int* firstFrame }
 
 //-----------------------------------------------------------------------------------
 //

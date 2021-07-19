@@ -14,40 +14,31 @@ class RenderTextureDX11 : public RenderTexture
 {
 private:
 	Graphics* graphics = nullptr;
-
-	ID3D11Texture2D* texture = nullptr;
-	ID3D11ShaderResourceView* textureSRV = nullptr;
-	ID3D11RenderTargetView* textureRTV = nullptr;
-	DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_UNKNOWN;
+	EffekseerRendererDX11::Backend::TextureRef texture_;
 
 public:
 	RenderTextureDX11(Graphics* graphics);
 	virtual ~RenderTextureDX11();
-	bool Initialize(Effekseer::Tool::Vector2DI size, TextureFormat format, uint32_t multisample = 1);
+	bool Initialize(Effekseer::Tool::Vector2DI size, Effekseer::Backend::TextureFormatType format, uint32_t multisample = 1);
+
+	Effekseer::Backend::TextureRef GetAsBackend() override
+	{
+		return texture_;
+	}
 
 	ID3D11Texture2D* GetTexture() const
 	{
-		return texture;
-	}
-
-	ID3D11RenderTargetView* GetRenderTargetView() const
-	{
-		return textureRTV;
-	}
-
-	ID3D11ShaderResourceView* GetShaderResourceView() const
-	{
-		return textureSRV;
+		return texture_->GetTexture();
 	}
 
 	uint64_t GetViewID() override
 	{
-		return (uint64_t)textureSRV;
+		return (uint64_t)texture_->GetSRV();
 	}
 
 	DXGI_FORMAT GetDXGIFormat() const
 	{
-		return dxgiFormat_;
+		return EffekseerRendererDX11::Backend::GetTextureFormatType(texture_->GetFormat());
 	}
 };
 
@@ -55,31 +46,21 @@ class DepthTextureDX11 : public DepthTexture
 {
 private:
 	Graphics* graphics = nullptr;
-	int32_t width = 0;
-	int32_t height = 0;
-
-	ID3D11Texture2D* depthBuffer = nullptr;
-	ID3D11DepthStencilView* depthStencilView = nullptr;
-	ID3D11ShaderResourceView* depthSRV = nullptr;
+	EffekseerRendererDX11::Backend::TextureRef texture_;
 
 public:
 	DepthTextureDX11(Graphics* graphics);
 	virtual ~DepthTextureDX11();
 	bool Initialize(int32_t width, int32_t height, uint32_t multisample = 1);
 
+	Effekseer::Backend::TextureRef GetAsBackend() override
+	{
+		return texture_;
+	}
+
 	ID3D11Texture2D* GetTexture() const
 	{
-		return depthBuffer;
-	}
-
-	ID3D11DepthStencilView* GetDepthStencilView() const
-	{
-		return depthStencilView;
-	}
-
-	ID3D11ShaderResourceView* GetShaderResourceView() const
-	{
-		return depthSRV;
+		return texture_->GetTexture();
 	}
 };
 
@@ -120,9 +101,9 @@ public:
 	GraphicsDX11();
 	virtual ~GraphicsDX11();
 
-	bool Initialize(void* windowHandle, int32_t windowWidth, int32_t windowHeight, bool isSRGBMode) override;
+	bool Initialize(void* windowHandle, int32_t windowWidth, int32_t windowHeight) override;
 
-	void CopyTo(RenderTexture* src, RenderTexture* dst) override;
+	void CopyTo(Effekseer::Backend::TextureRef src, Effekseer::Backend::TextureRef dst) override;
 
 	void Resize(int32_t width, int32_t height) override;
 
@@ -132,17 +113,17 @@ public:
 
 	void EndScene() override;
 
-	void SetRenderTarget(RenderTexture** renderTextures, int32_t renderTextureCount, DepthTexture* depthTexture) override;
+	void SetRenderTarget(std::vector<Effekseer::Backend::TextureRef> renderTextures, Effekseer::Backend::TextureRef depthTexture) override;
 
-	void SaveTexture(RenderTexture* texture, std::vector<Effekseer::Color>& pixels) override;
+	void SaveTexture(Effekseer::Backend::TextureRef texture, std::vector<Effekseer::Color>& pixels) override;
 
 	void Clear(Effekseer::Color color) override;
 
-	void ResolveRenderTarget(RenderTexture* src, RenderTexture* dest) override;
+	void ResolveRenderTarget(Effekseer::Backend::TextureRef src, Effekseer::Backend::TextureRef dest) override;
 
-	bool CheckFormatSupport(TextureFormat format, TextureFeatureType feature) override;
+	bool CheckFormatSupport(Effekseer::Backend::TextureFormatType format, TextureFeatureType feature) override;
 
-	int GetMultisampleLevel(TextureFormat format) override;
+	int GetMultisampleLevel(Effekseer::Backend::TextureFormatType format) override;
 
 	void ResetDevice() override;
 

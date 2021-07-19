@@ -818,6 +818,17 @@ void EffectNodeImplemented::CalcCustomData(const Instance* instance, std::array<
 	}
 }
 
+bool EffectNodeImplemented::Traverse(const std::function<bool(EffectNodeImplemented*)>& visitor)
+{
+	if (!visitor(this)) return false;	// cancel
+
+	for (EffectNodeImplemented* child : m_Nodes) {
+		if (!child->Traverse(visitor)) return false;
+	}
+
+	return true;	// continue
+}
+
 //----------------------------------------------------------------------------------
 //
 //----------------------------------------------------------------------------------
@@ -880,9 +891,9 @@ EffectBasicRenderParameter EffectNodeImplemented::GetBasicRenderParameter()
 	else
 	{
 		param.FlipbookParams.Enable = false;
-		param.FlipbookParams.LoopType = RendererCommon.UVs[0].Animation.LoopType;
-		param.FlipbookParams.DivideX = RendererCommon.UVs[0].Animation.FrameCountX;
-		param.FlipbookParams.DivideY = RendererCommon.UVs[0].Animation.FrameCountY;
+		param.FlipbookParams.LoopType = 0;
+		param.FlipbookParams.DivideX = 0;
+		param.FlipbookParams.DivideY = 0;
 	}
 
 	param.MaterialType = RendererCommon.MaterialType;
@@ -980,7 +991,6 @@ EffectModelParameter EffectNodeImplemented::GetEffectModelParameter()
 
 	if (GetType() == EFFECT_NODE_TYPE_MODEL)
 	{
-		auto t = (EffectNodeModel*)this;
 		param.Lighting = RendererCommon.MaterialType == RendererMaterialType::Lighting;
 	}
 

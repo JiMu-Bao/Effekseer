@@ -28,10 +28,13 @@ struct RenderStateSet
 	GLint cullFaceMode;
 	GLint blendSrc;
 	GLint blendDst;
+	GLint blendSrcAlpha;
+	GLint blendDstAlpha;
 	GLint blendEquation;
 	GLint vao;
 	GLint arrayBufferBinding;
 	GLint elementArrayBufferBinding;
+	GLint program;
 	std::array<GLint, ::Effekseer::TextureSlotMax> boundTextures;
 };
 
@@ -43,6 +46,35 @@ struct RenderStateSet
 class RendererImplemented;
 using RendererImplementedRef = ::Effekseer::RefPtr<RendererImplemented>;
 
+struct VertexArrayGroup
+{
+	std::unique_ptr<VertexArray> vao_unlit;
+	std::unique_ptr<VertexArray> vao_distortion;
+	std::unique_ptr<VertexArray> vao_lit;
+	std::unique_ptr<VertexArray> vao_ad_unlit;
+	std::unique_ptr<VertexArray> vao_ad_lit;
+	std::unique_ptr<VertexArray> vao_ad_distortion;
+
+	std::unique_ptr<VertexArray> vao_unlit_wire;
+	std::unique_ptr<VertexArray> vao_distortion_wire;
+	std::unique_ptr<VertexArray> vao_lit_wire;
+	std::unique_ptr<VertexArray> vao_ad_unlit_wire;
+	std::unique_ptr<VertexArray> vao_ad_distortion_wire;
+	std::unique_ptr<VertexArray> vao_ad_lit_wire;
+
+	void Create(
+		Backend::GraphicsDeviceRef graphicsDevice,
+		VertexBuffer* vertexBuffer,
+		IndexBuffer* indexBuffer,
+		IndexBuffer* indexBufferForWireframe,
+		Shader* shader_unlit,
+		Shader* shader_distortion,
+		Shader* shader_lit,
+		Shader* shader_ad_unlit,
+		Shader* shader_ad_lit,
+		Shader* shader_ad_distortion);
+};
+
 class RendererImplemented : public Renderer, public ::Effekseer::ReferenceObject
 {
 	friend class DeviceObject;
@@ -50,7 +82,20 @@ class RendererImplemented : public Renderer, public ::Effekseer::ReferenceObject
 private:
 	Backend::GraphicsDeviceRef graphicsDevice_ = nullptr;
 
-	VertexBuffer* m_vertexBuffer;
+	struct PlatformSetting
+	{
+		bool isRingBufferEnabled;
+		int ringBufferCount;
+	};
+
+	struct RingVertex
+	{
+		std::unique_ptr<VertexBuffer> vertexBuffer;
+		std::unique_ptr<VertexArrayGroup> vao;
+	};
+
+	std::vector<std::shared_ptr<RingVertex>> ringVs_;
+
 	IndexBuffer* m_indexBuffer = nullptr;
 	IndexBuffer* m_indexBufferForWireframe = nullptr;
 	int32_t m_squareMaxCount;
@@ -65,15 +110,6 @@ private:
 	Shader* currentShader = nullptr;
 
 	EffekseerRenderer::StandardRenderer<RendererImplemented, Shader>* m_standardRenderer;
-
-	VertexArray* vao_unlit_ = nullptr;
-	VertexArray* vao_distortion_ = nullptr;
-	VertexArray* vao_lit_ = nullptr;
-	VertexArray* vao_ad_unlit_ = nullptr;
-	VertexArray* vao_ad_lit_ = nullptr;
-	VertexArray* vao_ad_distortion_ = nullptr;
-
-	VertexArray* m_vao_wire_frame = nullptr;
 
 	//! default vao (alsmot for material)
 	GLuint defaultVertexArray_ = 0;
@@ -99,6 +135,8 @@ private:
 	int32_t indexBufferStride_ = 2;
 
 	int32_t indexBufferCurrentStride_ = 0;
+
+	static PlatformSetting GetPlatformSetting();
 
 	//! because gleDrawElements has only index offset
 	int32_t GetIndexSpriteCount() const;
@@ -231,7 +269,7 @@ public:
 
 	bool IsVertexArrayObjectSupported() const override;
 
-	Backend::GraphicsDeviceRef& GetIntetnalGraphicsDevice()
+	Backend::GraphicsDeviceRef& GetInternalGraphicsDevice()
 	{
 		return graphicsDevice_;
 	}
@@ -261,9 +299,13 @@ private:
 	void GenerateIndexDataStride();
 };
 
-void AssignPixelConstantBuffer(Shader* shader);
+void AddVertexUniformLayout(Effekseer::CustomVector<Effekseer::Backend::UniformLayoutElement>& uniformLayout);
 
-void AssignDistortionPixelConstantBuffer(Shader* shader);
+void AddPixelUniformLayout(Effekseer::CustomVector<Effekseer::Backend::UniformLayoutElement>& uniformLayout);
+
+void AddDistortionPixelUniformLayout(Effekseer::CustomVector<Effekseer::Backend::UniformLayoutElement>& uniformLayout);
+
+Effekseer::CustomVector<Effekseer::CustomString<char>> GetTextureLocations(EffekseerRenderer::RendererShaderType type);
 
 //----------------------------------------------------------------------------------
 //

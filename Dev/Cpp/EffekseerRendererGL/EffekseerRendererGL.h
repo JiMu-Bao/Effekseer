@@ -6,7 +6,7 @@
 #include <vector>
 
 #if defined(_WIN32)
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 #if defined(__EFFEKSEER_RENDERER_GLES2__)
@@ -102,6 +102,18 @@ namespace EffekseerRenderer
 
 class Renderer;
 using RendererRef = ::Effekseer::RefPtr<Renderer>;
+
+/**
+	@brief	Specify a shader for renderer from external class
+	@note
+	For Effekseer tools
+*/
+struct ExternalShaderSettings
+{
+	Effekseer::Backend::ShaderRef StandardShader;
+	Effekseer::Backend::ShaderRef ModelShader;
+	Effekseer::AlphaBlendType Blend;
+};
 
 /**
 	@brief	
@@ -518,6 +530,20 @@ public:
 		\~Japanese	グラフィクスデバイスを取得する。
 	*/
 	virtual Effekseer::Backend::GraphicsDeviceRef GetGraphicsDevice() const;
+
+	/**
+		@brief	Get external shader settings
+		@note
+		For	Effekseer tools
+	*/
+	virtual std::shared_ptr<ExternalShaderSettings> GetExternalShaderSettings() const;
+
+	/**
+		@brief	Specify external shader settings
+		@note
+		For	Effekseer tools
+	*/
+	virtual void SetExternalShaderSettings(const std::shared_ptr<ExternalShaderSettings>& settings);
 };
 
 //----------------------------------------------------------------------------------

@@ -45,6 +45,8 @@ enum class TextureFormatType
 	R8G8B8A8_UNORM,
 	B8G8R8A8_UNORM,
 	R8_UNORM,
+	R16_FLOAT,
+	R32_FLOAT,
 	R16G16_FLOAT,
 	R16G16B16A16_FLOAT,
 	R32G32B32A32_FLOAT,
@@ -90,8 +92,9 @@ enum class TextureType
 struct UniformLayoutElement
 {
 	ShaderStageType Stage = ShaderStageType::Vertex;
-	std::string Name;
+	CustomString<char> Name;
 	UniformBufferLayoutElementType Type;
+	int32_t Count = 1;
 
 	//! Ignored in UniformBuffer
 	int32_t Offset;
@@ -106,18 +109,18 @@ class UniformLayout
 	: public ReferenceObject
 {
 private:
-	CustomVector<std::string> textures_;
+	CustomVector<CustomString<char>> textures_;
 	CustomVector<UniformLayoutElement> elements_;
 
 public:
-	UniformLayout(CustomVector<std::string> textures, CustomVector<UniformLayoutElement> elements)
+	UniformLayout(CustomVector<CustomString<char>> textures, CustomVector<UniformLayoutElement> elements)
 		: textures_(std::move(textures))
 		, elements_(std::move(elements))
 	{
 	}
 	virtual ~UniformLayout() = default;
 
-	const CustomVector<std::string>& GetTextures() const
+	const CustomVector<CustomString<char>>& GetTextures() const
 	{
 		return textures_;
 	}
@@ -193,6 +196,7 @@ protected:
 	TextureFormatType format_ = {};
 	std::array<int32_t, 2> size_ = {};
 	bool hasMipmap_ = false;
+	int32_t samplingCount_ = 1;
 
 public:
 	Texture() = default;
@@ -206,6 +210,11 @@ public:
 	std::array<int32_t, 2> GetSize() const
 	{
 		return size_;
+	}
+
+	int32_t GetSamplingCount() const
+	{
+		return samplingCount_;
 	}
 
 	bool GetHasMipmap() const
@@ -299,10 +308,10 @@ struct VertexLayoutElement
 	VertexLayoutFormat Format;
 
 	//! only for OpenGL
-	std::string Name;
+	CustomString<char> Name;
 
 	//! only for DirectX
-	std::string SemanticName;
+	CustomString<char> SemanticName;
 
 	//! only for DirectX
 	int32_t SemanticIndex = 0;
@@ -402,16 +411,28 @@ struct TextureParameter
 	CustomVector<uint8_t> InitialData;
 };
 
+/**
+	@brief	Render texture
+	@note
+	You don't need to implement it to run Effekseer Runtime
+*/
 struct RenderTextureParameter
 {
 	TextureFormatType Format = TextureFormatType::R8G8B8A8_UNORM;
 	std::array<int32_t, 2> Size;
+	int SamplingCount = 1;
 };
 
+/**
+	@brief	Render texture
+	@note
+	You don't need to implement it to run Effekseer Runtime
+*/
 struct DepthTextureParameter
 {
 	TextureFormatType Format = TextureFormatType::R8G8B8A8_UNORM;
 	std::array<int32_t, 2> Size;
+	int SamplingCount = 1;
 };
 
 class GraphicsDevice
@@ -545,7 +566,7 @@ public:
 		return ShaderRef{};
 	}
 
-	virtual ShaderRef CreateShaderFromCodes(const char* vsCode, const char* psCode, UniformLayoutRef layout = nullptr)
+	virtual ShaderRef CreateShaderFromCodes(const CustomVector<StringView<char>>& vsCodes, const CustomVector<StringView<char>>& psCodes, UniformLayoutRef layout = nullptr)
 	{
 		return ShaderRef{};
 	}

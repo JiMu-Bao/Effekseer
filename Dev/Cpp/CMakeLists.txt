@@ -13,7 +13,7 @@ endif()
 
 # For Mac
 if(APPLE)
-	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.10)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
 endif()
 
 if (MSVC)
@@ -81,7 +81,7 @@ endif()
 
 add_subdirectory(EffekseerRendererGL)
 
-if(BUILD_UNITYPLUGIN)
+if(BUILD_UNITYPLUGIN OR BUILD_UNITYPLUGIN_FOR_IOS)
     add_subdirectory(EffekseerRendererCommon)
 endif()
 

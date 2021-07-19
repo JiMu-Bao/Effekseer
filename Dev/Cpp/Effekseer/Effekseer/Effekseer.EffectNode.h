@@ -1280,7 +1280,7 @@ struct ParameterAlphaCutoff
 	} FCurve;
 
 	float EdgeThreshold = 0.0f;
-	Color EdgeColor;
+	Color EdgeColor = Color(0, 0, 0, 0);
 	float EdgeColorScaling = 0.0f;
 
 	ParameterAlphaCutoff()
@@ -1340,7 +1340,7 @@ struct ParameterAlphaCutoff
 			int32_t temp = 0;
 			memcpy(&temp, pos, sizeof(int32_t));
 			pos += sizeof(int32_t);
-			EdgeColorScaling = temp;
+			EdgeColorScaling = static_cast<float>(temp);
 		}
 	}
 };
@@ -1519,6 +1519,8 @@ public:
 	int32_t RenderingPriority = -1;
 
 	DynamicFactorParameter DynamicFactor;
+
+	bool Traverse(const std::function<bool(EffectNodeImplemented*)>& visitor);
 
 	Effect* GetEffect() const override;
 

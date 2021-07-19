@@ -276,8 +276,12 @@ void EffectFactory::OnLoadingResource(Effect* effect, const void* data, int32_t 
 
 	for (int32_t ind = 0; ind < effect->GetProceduralModelCount(); ind++)
 	{
-		auto model = resourceMgr->GenerateProceduralModel(effect->GetProceduralModelParameter(ind));
-		SetProceduralModel(effect, ind, model);
+		const auto param = effect->GetProceduralModelParameter(ind);
+		if (param != nullptr)
+		{
+			auto model = resourceMgr->GenerateProceduralModel(*param);
+			SetProceduralModel(effect, ind, model);
+		}
 	}
 }
 
@@ -383,6 +387,11 @@ EffectRef Effect::Create(const ManagerRef& manager, const char16_t* path, float 
 	auto effect = EffectImplemented::Create(manager, data, size, magnification, materialPath);
 
 	eLoader->Unload(data, size);
+
+	if (effect.Get() == nullptr)
+	{
+		return nullptr;
+	}
 
 	effect->SetName(getFilenameWithoutExt(path).c_str());
 
@@ -915,7 +924,7 @@ void EffectImplemented::Reset()
 	m_normalImagePaths.clear();
 	m_normalImages.clear();
 	m_distortionImagePaths.clear();
-	m_distortionImagePaths.clear();
+	m_distortionImages.clear();
 	m_WavePaths.clear();
 	m_pWaves.clear();
 	modelPaths_.clear();
@@ -924,6 +933,8 @@ void EffectImplemented::Reset()
 	materials_.clear();
 	curvePaths_.clear();
 	curves_.clear();
+	proceduralModels_.clear();
+	proceduralModelParameters_.clear();
 
 	ES_SAFE_DELETE(m_pRoot);
 }
@@ -1290,7 +1301,7 @@ bool EffectImplemented::Reload(ManagerRef* managers,
 	auto originalMag = this->GetMaginification() / this->m_maginificationExternal;
 	auto originalMagExt = this->m_maginificationExternal;
 
-	isReloadingOnRenderingThread = true;
+	isReloadingOnRenderingThread = reloadingThreadType == ReloadingThreadType::Render;
 	Reset();
 	Load(data, size, originalMag * originalMagExt, matPath, reloadingThreadType);
 
@@ -1353,7 +1364,7 @@ bool EffectImplemented::Reload(
 		lockCount++;
 	}
 
-	isReloadingOnRenderingThread = true;
+	isReloadingOnRenderingThread = reloadingThreadType == ReloadingThreadType::Render;
 	Reset();
 	Load(data, size, m_maginificationExternal, materialPath, reloadingThreadType);
 	isReloadingOnRenderingThread = false;
